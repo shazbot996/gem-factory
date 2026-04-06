@@ -1,0 +1,3 @@
+# Executed: 2026-04-05T13:09:09.127420
+
+hmm maybe this user I used did not have privileges to create a database I'm not sure how can I tell what error this was schiele@CBS-LEGION:~/gem-factory$ make db-init === Gem Factory Database Setup ===  Database host [localhost]: branch.local Database port [5432]: Database user [postgres]: fsm_dev Database password: Database name [gem_factory]:  Config saved to .db-config  Testing connection to branch.local:5432 as fsm_dev... [OK] Server is accepting connections [OK] Authenticated (database 'gem_factory' may not exist yet) make[1]: *** [Makefile:48: db-test] Error 2 make: *** [Makefile:16: db-init] Error 2

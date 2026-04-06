@@ -1,0 +1,16 @@
+services:
+  api:
+    build: ./server
+    ports:
+      - "9090:9090"
+    environment:
+      PORT: "9090"
+      DATABASE_URL: "${DATABASE_URL}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      ALLOWED_DOMAIN: "${ALLOWED_DOMAIN:-}"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:-charles.schiele@gmail.com}"
+      NODE_ENV: development
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    command: node --watch server.js
