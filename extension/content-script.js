@@ -148,15 +148,27 @@
 
         if (!result || result.error) {
           setFabState('error');
-          showOverlay(result || { error: 'Extraction failed.' });
+          showOverlay({ error: (result && result.error) || 'Extraction failed.' });
           return;
         }
 
-        // Store in extension storage for future SPA integration
-        chrome.runtime.sendMessage({ type: 'STORE_GEM', gem: result.gems[0] });
+        var gem = result.gems[0];
 
-        setFabState('success');
-        showOverlay(result);
+        // Store locally — callback tells us if new or updated, plus the full list
+        chrome.runtime.sendMessage({ type: 'STORE_GEM', gem: gem }, function (resp) {
+          if (resp && resp.success) {
+            setFabState('success');
+            showOverlay({
+              gem: gem,
+              wasUpdate: resp.wasUpdate,
+              totalGems: resp.totalGems,
+              allGems: resp.allGems
+            });
+          } else {
+            setFabState('error');
+            showOverlay({ error: 'Failed to save gem locally.' });
+          }
+        });
       } catch (err) {
         setFabState('error');
         showOverlay({ error: err.message || 'An unexpected error occurred.' });
@@ -192,13 +204,20 @@
 
     var title = document.createElement('h2');
     title.className = 'gf-title';
-    title.textContent = 'Gem Factory \u2014 Extracted Gem';
+
+    if (result.error) {
+      title.textContent = 'Gem Factory \u2014 Error';
+    } else if (result.wasUpdate) {
+      title.textContent = 'Gem Factory \u2014 Gem Updated';
+    } else {
+      title.textContent = 'Gem Factory \u2014 Gem Saved';
+    }
     header.appendChild(title);
 
-    if (result.gems && result.gems.length > 0) {
+    if (result.gem) {
       var badge = document.createElement('span');
       badge.className = 'gf-badge';
-      badge.textContent = result.gems[0].name;
+      badge.textContent = result.gem.name;
       header.appendChild(badge);
     }
 
@@ -218,74 +237,97 @@
       msg.className = 'gf-message gf-error';
       msg.textContent = result.error;
       body.appendChild(msg);
-    } else if (!result.gems || result.gems.length === 0) {
-      var emptyMsg = document.createElement('div');
-      emptyMsg.className = 'gf-message';
-      emptyMsg.textContent = 'No gem data found on this page.';
-      body.appendChild(emptyMsg);
     } else {
-      var pre = document.createElement('pre');
-      pre.textContent = JSON.stringify(result.gems, null, 2);
-      body.appendChild(pre);
+      // Confirmation banner
+      var banner = document.createElement('div');
+      if (result.wasUpdate) {
+        banner.className = 'gf-banner gf-banner-update';
+        banner.textContent = '\u2714 "' + result.gem.name + '" was already in your list and has been updated with the latest version.';
+      } else {
+        banner.className = 'gf-banner gf-banner-success';
+        banner.textContent = '\u2714 "' + result.gem.name + '" has been saved to your local gem list.';
+      }
+      body.appendChild(banner);
+
+      // Instructions preview
+      if (result.gem.instructions) {
+        var previewLabel = document.createElement('div');
+        previewLabel.className = 'gf-section-label';
+        previewLabel.textContent = 'Instructions preview';
+        body.appendChild(previewLabel);
+
+        var preview = document.createElement('div');
+        preview.className = 'gf-instructions-preview';
+        var text = result.gem.instructions;
+        preview.textContent = text.length > 300 ? text.substring(0, 300) + '\u2026' : text;
+        body.appendChild(preview);
+      }
+
+      // Running list of all gems
+      if (result.allGems && result.allGems.length > 0) {
+        var listLabel = document.createElement('div');
+        listLabel.className = 'gf-section-label';
+        listLabel.textContent = 'Your gem collection (' + result.allGems.length + ')';
+        body.appendChild(listLabel);
+
+        var gemList = document.createElement('ul');
+        gemList.className = 'gf-gem-list';
+
+        // Show newest first
+        var sorted = result.allGems.slice().sort(function (a, b) {
+          return (b.extractedAt || '').localeCompare(a.extractedAt || '');
+        });
+
+        for (var i = 0; i < sorted.length; i++) {
+          var li = document.createElement('li');
+          li.className = 'gf-gem-list-item';
+          // Highlight the gem we just saved
+          if (sorted[i].id === result.gem.id) {
+            li.className += ' gf-gem-list-item-active';
+          }
+          var nameSpan = document.createElement('span');
+          nameSpan.className = 'gf-gem-list-name';
+          nameSpan.textContent = sorted[i].name || '(unnamed)';
+          li.appendChild(nameSpan);
+
+          if (sorted[i].extractedAt) {
+            var dateSpan = document.createElement('span');
+            dateSpan.className = 'gf-gem-list-date';
+            try {
+              var d = new Date(sorted[i].extractedAt);
+              dateSpan.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            } catch (e) {
+              dateSpan.textContent = '';
+            }
+            li.appendChild(dateSpan);
+          }
+          gemList.appendChild(li);
+        }
+
+        body.appendChild(gemList);
+      }
     }
 
     // --- Footer ---
     var footer = document.createElement('div');
     footer.className = 'gf-footer';
 
-    if (result.gems && result.gems.length > 0) {
+    if (result.gem) {
       var copyBtn = document.createElement('button');
       copyBtn.className = 'gf-btn gf-btn-primary';
-      copyBtn.textContent = 'Copy to Clipboard';
+      copyBtn.textContent = 'Copy JSON';
       copyBtn.addEventListener('click', async function () {
-        var prEl = overlay.querySelector('pre');
-        if (!prEl) return;
         try {
-          await navigator.clipboard.writeText(prEl.textContent);
+          var payload = { name: result.gem.name, instructions: result.gem.instructions, source: result.gem.source || 'edit_page' };
+          await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
           copyBtn.textContent = 'Copied!';
-          setTimeout(function () { copyBtn.textContent = 'Copy to Clipboard'; }, 2000);
+          setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 2000);
         } catch (e) {
           copyBtn.textContent = 'Copy failed';
-          setTimeout(function () { copyBtn.textContent = 'Copy to Clipboard'; }, 2000);
+          setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 2000);
         }
       });
       footer.appendChild(copyBtn);
-
-      var sendBtn = document.createElement('button');
-      sendBtn.className = 'gf-btn gf-btn-primary gf-btn-send';
-      sendBtn.textContent = 'Send to API';
-      sendBtn.addEventListener('click', function () {
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Sending\u2026';
-        var gem = result.gems[0];
-        // Build import payload matching /api/gems/import shape
-        var importGem = {
-          name: gem.name,
-          instructions: gem.instructions
-        };
-        if (gem.source) importGem.source = gem.source;
-        chrome.runtime.sendMessage({ type: 'SEND_TO_API', gem: importGem }, function (resp) {
-          if (resp && resp.success) {
-            sendBtn.textContent = 'Sent!';
-            sendBtn.className = 'gf-btn gf-btn-success';
-            setTimeout(function () {
-              sendBtn.textContent = 'Send to API';
-              sendBtn.className = 'gf-btn gf-btn-primary gf-btn-send';
-              sendBtn.disabled = false;
-            }, 2000);
-          } else {
-            var errMsg = (resp && resp.error) || 'Send failed';
-            sendBtn.textContent = errMsg;
-            sendBtn.className = 'gf-btn gf-btn-error';
-            setTimeout(function () {
-              sendBtn.textContent = 'Send to API';
-              sendBtn.className = 'gf-btn gf-btn-primary gf-btn-send';
-              sendBtn.disabled = false;
-            }, 3000);
-          }
-        });
-      });
-      footer.appendChild(sendBtn);
     }
 
     var closeFooterBtn = document.createElement('button');

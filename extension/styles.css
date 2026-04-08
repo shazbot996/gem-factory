@@ -220,29 +220,6 @@
   background: #3367d6;
 }
 
-#gem-factory-overlay .gf-btn-send {
-  background: #1a73e8;
-}
-
-#gem-factory-overlay .gf-btn-send:hover {
-  background: #1765cc;
-}
-
-#gem-factory-overlay .gf-btn-success {
-  background: #0f9d58;
-  color: white;
-}
-
-#gem-factory-overlay .gf-btn-error {
-  background: #d93025;
-  color: white;
-  font-size: 12px;
-}
-
-#gem-factory-overlay .gf-btn:disabled {
-  opacity: 0.7;
-  cursor: default;
-}
 
 #gem-factory-overlay .gf-btn-secondary {
   background: #f1f3f4;
@@ -251,4 +228,99 @@
 
 #gem-factory-overlay .gf-btn-secondary:hover {
   background: #e8eaed;
+}
+
+/* ---------- Confirmation Banners ---------- */
+
+#gem-factory-overlay .gf-banner {
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+#gem-factory-overlay .gf-banner-success {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+#gem-factory-overlay .gf-banner-update {
+  background: #fef7e0;
+  color: #7c6a0a;
+}
+
+/* ---------- Section Labels ---------- */
+
+#gem-factory-overlay .gf-section-label {
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #5f6368;
+  margin-bottom: 8px;
+}
+
+/* ---------- Instructions Preview ---------- */
+
+#gem-factory-overlay .gf-instructions-preview {
+  font-family: 'Roboto Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #3c4043;
+  background: #f8f9fa;
+  border: 1px solid #e8eaed;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Gem Collection List ---------- */
+
+#gem-factory-overlay .gf-gem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e8eaed;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#gem-factory-overlay .gf-gem-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f3f4;
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+}
+
+#gem-factory-overlay .gf-gem-list-item:last-child {
+  border-bottom: none;
+}
+
+#gem-factory-overlay .gf-gem-list-item-active {
+  background: #e8f0fe;
+}
+
+#gem-factory-overlay .gf-gem-list-name {
+  color: #202124;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+#gem-factory-overlay .gf-gem-list-date {
+  color: #9aa0a6;
+  font-size: 11px;
+  margin-left: 12px;
+  flex-shrink: 0;
 }
