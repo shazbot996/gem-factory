@@ -34,6 +34,72 @@
   // ---------- DOM Extraction ----------
 
   /**
+   * Look for knowledge files uploaded to the gem.
+   */
+  function extractKnowledgeFiles() {
+    var files = [];
+    // Search for a section labeled "Knowledge"
+    var headings = document.querySelectorAll('h1, h2, h3, [role="heading"]');
+    var knowledgeSection = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].textContent.trim().toLowerCase() === 'knowledge') {
+        // Find the container that likely holds the files
+        var current = headings[i].nextElementSibling;
+        while (current) {
+          // Look for common file extension patterns in text nodes
+          var text = current.textContent || '';
+          var matches = text.match(/[a-zA-Z0-9._-]+\.(pdf|docx|txt|csv|xlsx|pptx|py|json|md)/gi);
+          if (matches) {
+            matches.forEach(function (m) {
+              if (!files.includes(m)) files.push(m);
+            });
+          }
+          // If we hit another heading, we've probably left the knowledge section
+          if (current.matches('h1, h2, h3, [role="heading"]')) break;
+          current = current.nextElementSibling;
+        }
+        break;
+      }
+    }
+    return files;
+  }
+
+  /**
+   * Look for enabled tools (Google Search, Python, etc.)
+   */
+  function extractEnabledTools() {
+    var tools = [];
+    // Common tools in Gemini
+    var toolNames = ['Google Search', 'Python', 'Image generation', 'Advanced Analysis'];
+    
+    // Search for toggles/switches that are enabled
+    var allElements = document.querySelectorAll('button[role="switch"], div[role="switch"], [role="checkbox"]');
+    for (var i = 0; i < allElements.length; i++) {
+      var el = allElements[i];
+      var isEnabled = el.getAttribute('aria-checked') === 'true' || el.classList.contains('checked');
+      
+      if (isEnabled) {
+        // Find the label for this switch
+        var label = '';
+        // Check aria-label
+        label = el.getAttribute('aria-label') || '';
+        // Check sibling text
+        if (!label && el.parentElement) {
+          label = el.parentElement.textContent.trim();
+        }
+        
+        // Match against known tool names or just use the label if it's short
+        for (var j = 0; j < toolNames.length; j++) {
+          if (label.toLowerCase().includes(toolNames[j].toLowerCase())) {
+            if (!tools.includes(toolNames[j])) tools.push(toolNames[j]);
+          }
+        }
+      }
+    }
+    return tools;
+  }
+
+  /**
    * Extract gem data directly from the edit page's form fields.
    * The edit page renders the gem name in an input and the full
    * instructions in a Quill rich-text editor (.ql-editor).
@@ -93,7 +159,8 @@
         name: name || '(unnamed)',
         description: '',
         instructions: instructions,
-        knowledgeFiles: [],
+        knowledgeFiles: extractKnowledgeFiles(),
+        defaultTools: extractEnabledTools(),
         extractedAt: new Date().toISOString(),
         source: 'edit_page'
       }]
@@ -318,7 +385,13 @@
       copyBtn.textContent = 'Copy JSON';
       copyBtn.addEventListener('click', async function () {
         try {
-          var payload = { name: result.gem.name, instructions: result.gem.instructions, source: result.gem.source || 'edit_page' };
+          var payload = { 
+            name: result.gem.name, 
+            instructions: result.gem.instructions, 
+            knowledgeFiles: result.gem.knowledgeFiles || [],
+            defaultTools: result.gem.defaultTools || [],
+            source: result.gem.source || 'edit_page' 
+          };
           await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
           copyBtn.textContent = 'Copied!';
           setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 2000);

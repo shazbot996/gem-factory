@@ -56,6 +56,22 @@ function render(data) {
       info.appendChild(preview);
     }
 
+    if (gem.knowledgeFiles && gem.knowledgeFiles.length > 0) {
+      var kf = document.createElement('div');
+      kf.className = 'gem-meta';
+      kf.style.marginTop = '4px';
+      kf.textContent = 'Knowledge: ' + gem.knowledgeFiles.join(', ');
+      info.appendChild(kf);
+    }
+
+    if (gem.defaultTools && gem.defaultTools.length > 0) {
+      var dt = document.createElement('div');
+      dt.className = 'gem-meta';
+      dt.style.marginTop = '2px';
+      dt.textContent = 'Tools: ' + gem.defaultTools.join(', ');
+      info.appendChild(dt);
+    }
+
     var del = document.createElement('button');
     del.className = 'gem-delete';
     del.title = 'Remove gem';
@@ -83,7 +99,13 @@ function render(data) {
   exportBtn.textContent = 'Copy All as JSON';
   exportBtn.addEventListener('click', function () {
     var payload = gems.map(function (g) {
-      return { name: g.name, instructions: g.instructions, source: g.source || 'edit_page' };
+      return { 
+        name: g.name, 
+        instructions: g.instructions, 
+        knowledgeFiles: g.knowledgeFiles || [],
+        defaultTools: g.defaultTools || [],
+        source: g.source || 'edit_page' 
+      };
     });
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).then(function () {
       exportBtn.textContent = 'Copied!';
