@@ -38,25 +38,34 @@
    */
   function extractKnowledgeFiles() {
     var files = [];
-    // Search for a section labeled "Knowledge"
-    var headings = document.querySelectorAll('h1, h2, h3, [role="heading"]');
-    var knowledgeSection = null;
+    var headings = document.querySelectorAll('h1, h2, h3, [role="heading"], .section-title');
+    
     for (var i = 0; i < headings.length; i++) {
-      if (headings[i].textContent.trim().toLowerCase() === 'knowledge') {
-        // Find the container that likely holds the files
-        var current = headings[i].nextElementSibling;
-        while (current) {
-          // Look for common file extension patterns in text nodes
-          var text = current.textContent || '';
-          var matches = text.match(/[a-zA-Z0-9._-]+\.(pdf|docx|txt|csv|xlsx|pptx|py|json|md)/gi);
-          if (matches) {
-            matches.forEach(function (m) {
-              if (!files.includes(m)) files.push(m);
+      var hText = headings[i].textContent.trim().toLowerCase();
+      if (hText === 'knowledge' || hText.includes('your files')) {
+        // Look in the parent container for anything that looks like a filename
+        var container = headings[i].closest('section') || headings[i].parentElement;
+        if (container) {
+          // Look for text nodes or aria-labels that match file patterns
+          var allElems = container.querySelectorAll('*');
+          allElems.forEach(function(el) {
+            var text = (el.textContent || '').trim();
+            var label = el.getAttribute('aria-label') || '';
+            var title = el.getAttribute('title') || '';
+            
+            [text, label, title].forEach(function(str) {
+              if (!str) return;
+              // Very loose match for filenames: something.ext
+              var matches = str.match(/[a-zA-Z0-9._-]+\.[a-zA-Z0-9]{2,5}/g);
+              if (matches) {
+                matches.forEach(function(m) {
+                  // Filter out common UI strings that aren't files
+                  if (m.includes('..') || m.length < 5 || m.length > 100) return;
+                  if (!files.includes(m)) files.push(m);
+                });
+              }
             });
-          }
-          // If we hit another heading, we've probably left the knowledge section
-          if (current.matches('h1, h2, h3, [role="heading"]')) break;
-          current = current.nextElementSibling;
+          });
         }
         break;
       }
@@ -69,33 +78,60 @@
    */
   function extractEnabledTools() {
     var tools = [];
-    // Common tools in Gemini
-    var toolNames = ['Google Search', 'Python', 'Image generation', 'Advanced Analysis'];
+    // Tool keywords to search for
+    var toolSpecs = [
+      { name: 'Google Search', keywords: ['search', 'google search', 'web search'] },
+      { name: 'Python', keywords: ['python', 'code execution', 'analysis'] },
+      { name: 'Image generation', keywords: ['image', 'generate image', 'create image', 'dall-e'] },
+      { name: 'YouTube', keywords: ['youtube'] },
+      { name: 'Maps', keywords: ['maps', 'google maps'] }
+    ];
     
-    // Search for toggles/switches that are enabled
-    var allElements = document.querySelectorAll('button[role="switch"], div[role="switch"], [role="checkbox"]');
-    for (var i = 0; i < allElements.length; i++) {
-      var el = allElements[i];
-      var isEnabled = el.getAttribute('aria-checked') === 'true' || el.classList.contains('checked');
+    // 1. Try finding by roles
+    var switches = document.querySelectorAll('[role="switch"], [role="checkbox"], button, .mat-slide-toggle, .mat-checkbox');
+    switches.forEach(function(el) {
+      var isEnabled = el.getAttribute('aria-checked') === 'true' || 
+                      el.getAttribute('aria-pressed') === 'true' ||
+                      el.classList.contains('checked') ||
+                      el.classList.contains('mat-checked') ||
+                      el.classList.contains('is-checked');
       
       if (isEnabled) {
-        // Find the label for this switch
-        var label = '';
-        // Check aria-label
-        label = el.getAttribute('aria-label') || '';
-        // Check sibling text
-        if (!label && el.parentElement) {
-          label = el.parentElement.textContent.trim();
-        }
+        var contextText = (el.getAttribute('aria-label') || el.textContent || el.parentElement.textContent || '').toLowerCase();
         
-        // Match against known tool names or just use the label if it's short
-        for (var j = 0; j < toolNames.length; j++) {
-          if (label.toLowerCase().includes(toolNames[j].toLowerCase())) {
-            if (!tools.includes(toolNames[j])) tools.push(toolNames[j]);
-          }
-        }
+        toolSpecs.forEach(function(spec) {
+          spec.keywords.forEach(function(kw) {
+            if (contextText.includes(kw) && !tools.includes(spec.name)) {
+              tools.push(spec.name);
+            }
+          });
+        });
       }
+    });
+
+    // 2. Fallback: Search for tool labels and find nearest toggles
+    if (tools.length === 0) {
+      toolSpecs.forEach(function(spec) {
+        var labels = document.querySelectorAll('*');
+        for (var i = 0; i < labels.length; i++) {
+          var labelText = labels[i].textContent.toLowerCase();
+          var found = false;
+          spec.keywords.forEach(function(kw) {
+            if (labelText === kw || (labelText.includes(kw) && labelText.length < 30)) {
+              // Found a potential label, look for a switch in its vicinity
+              var area = labels[i].closest('div') || labels[i].parentElement;
+              var toggle = area ? area.querySelector('[aria-checked="true"], [aria-pressed="true"], .checked, .mat-checked') : null;
+              if (toggle) {
+                if (!tools.includes(spec.name)) tools.push(spec.name);
+                found = true;
+              }
+            }
+          });
+          if (found) break;
+        }
+      });
     }
+
     return tools;
   }
 

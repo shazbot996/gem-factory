@@ -40,9 +40,9 @@ gem-factory/
       users.js              ← user repository (upsert, find, list with gem counts)
     test/                   ← Node.js built-in test runner (node --test)
   extension/                ← Chrome extension (Manifest V3) — gem extractor
-    manifest.json           ← v0.8.0 — edit-page DOM extraction approach
+    manifest.json           ← v0.8.1 — edit-page DOM extraction approach
     background.js           ← service worker: gem storage, message routing, SPA comms protocol
-    content-script.js       ← FAB + overlay on gem edit pages, reads DOM fields directly
+    content-script.js       ← FAB + overlay on gem edit pages, reads DOM fields (name, instructions, knowledge, tools)
     page-script.js          ← MAIN world script (stub — reserved for future network interception)
     styles.css              ← FAB and modal overlay styles
     icons/                  ← placeholder PNGs (blue diamond)
@@ -106,7 +106,7 @@ gem-factory/
 
 ## Chrome extension (`extension/`)
 
-**Current approach (v0.8.0):** Extract one gem at a time from the gem **edit** page.
+**Current approach (v0.8.1):** Extract one gem at a time from the gem **edit** page.
 
 - The FAB (floating action button) only appears on `/gems/edit/*` URLs
 - Clicking the FAB reads the gem name from input fields, full instructions from the `.ql-editor` (Quill rich-text editor), knowledge file names from the "Knowledge" section, and enabled tools (Google Search, Python, etc.) from the "Tools" section directly in the DOM
