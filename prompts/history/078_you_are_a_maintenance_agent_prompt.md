@@ -1,16 +1,30 @@
+# Executed: 2026-04-15T13:08:14.218143
+
+You are a maintenance agent performing an **Update** action — regenerating a root project context file so it accurately reflects the current codebase.
+
+## Your task
+
+Rewrite the context file at `CLAUDE.md` so every fact matches the live code. This file is read by AI coding agents (Claude, Gemini) as their primary orientation to the project, so accuracy is critical.
+
+## Document to update
+
+- **Path:** `CLAUDE.md`
+- **Role:** Root project context file (read by AI agents via CLAUDE.md / GEMINI.md / AGENTS.md)
+
+<document>
 # Gem Factory — Claude Code Instructions
 
 ## What this project is
 
-Gem Factory is a central registry for Google Gemini gem configurations, branded as the **Schnucks Gem Registry** for Schnucks Markets. Users import their personal gems into a shared catalog for discovery, dedup, and promotion to Enterprise agents.
+Gem Factory is a central registry for Google Gemini gem configurations across a corporate Google Cloud org. Users import their personal gems into a shared catalog for discovery, dedup, and promotion to Enterprise agents.
 
 ## Project structure
 
 ```
 gem-factory/
   CLAUDE.md                 ← you are here
-  Makefile                  ← project-level commands (help, db-init, api-start, spa-dev, etc.)
-  docker-compose.yml        ← local dev: API server (port 9090)
+  Makefile                  ← project-level commands (help, db-init, api-start, etc.)
+  docker-compose.yml        ← local dev: API server (port 9090) + PostgreSQL (port 5432)
   .db-config                ← local database credentials (gitignored, created by `make db-init`)
   .gitignore
   docs/
@@ -18,7 +32,7 @@ gem-factory/
     specs/                  ← feature specifications
     plans/                  ← implementation plans
   server/                   ← Node.js (Express) REST API server
-    server.js               ← entry point: Express app, CORS, middleware, route mounting, SPA fallback
+    server.js               ← entry point: Express app, middleware, route mounting, startup
     Dockerfile              ← Node 20 Alpine container for Docker Compose
     package.json            ← ES modules, express + pg + google-auth-library
     middleware/
@@ -35,51 +49,13 @@ gem-factory/
       pool.js               ← pg Pool singleton (reads DATABASE_URL)
       migrate.js            ← lightweight migration runner (schema_migrations table)
       migrations/
-        001_initial_schema.sql   ← users, gems, duplicate_clusters, duplicate_cluster_members
-        002_add_gem_metadata.sql ← metadata column additions
+        001_initial_schema.sql  ← users, gems, duplicate_clusters, duplicate_cluster_members
       gems.js               ← gem repository (CRUD + search queries)
       users.js              ← user repository (upsert, find, list with gem counts)
-    public/                 ← static assets (serves SPA production build)
+    public/                 ← static assets (placeholder index.html)
     test/                   ← Node.js built-in test runner (node --test)
-  frontend/                 ← React SPA (TypeScript + Vite + Tailwind) — Schnucks branded
-    index.html              ← entry HTML ("Schnucks Gem Registry"), loads Google Identity Services
-    package.json            ← React 19, React Router 7.5, Tailwind 4.1, Vite 6.3, TypeScript 5.7
-    vite.config.ts          ← port 3000, /api proxy → localhost:9090, build → ../server/public/
-    .env.development        ← VITE_GOOGLE_CLIENT_ID, VITE_EXTENSION_ID, VITE_API_BASE_URL
-    public/
-      schnucks-logo.png     ← Schnucks Markets brand logo
-    src/
-      main.tsx              ← React DOM entry point
-      App.tsx               ← routes: Dashboard (/), Registry (/registry), GemDetail (/gems/:id)
-      index.css             ← Tailwind v4 import + Schnucks brand theme (@theme)
-      pages/
-        Dashboard.tsx       ← user's gems (GemTable) + org stats cards
-        Registry.tsx        ← full catalog with search, owner filter, pagination (50/page)
-        GemDetail.tsx       ← single gem view: instructions, knowledge files, tools, delete
-        NotFound.tsx        ← 404 page
-      components/
-        Layout.tsx          ← header: Schnucks logo + "Gem Registry", nav, user profile
-        GemTable.tsx        ← compact table view of gems (shared by Dashboard and Registry)
-        GemCard.tsx         ← card view component (legacy, not currently used)
-        SearchBar.tsx       ← debounced search input (300ms)
-        Pagination.tsx      ← page controls with record range display
-        EmptyState.tsx      ← empty state message
-      api/
-        client.ts           ← HTTP client with Bearer token auth + 401 refresh
-        gems.ts             ← importGems, listGems, getGem, deleteGem
-        users.ts            ← listUsers
-        stats.ts            ← getStats
-        types.ts            ← Gem, KnowledgeFile, GemOwner, Stats, UserProfile, ExtractedGem
-      auth/
-        AuthProvider.tsx    ← Google Sign-In context provider with token refresh
-        useAuth.ts          ← auth hook (user, token, isAuthenticated, signOut)
-        GoogleSignIn.tsx    ← sign-in button component
-        gis.d.ts            ← Google Identity Services type declarations
-      extension/
-        useExtension.ts     ← hook for Chrome extension messaging (GET_GEMS, CLEAR_GEMS)
-        chrome.d.ts         ← Chrome runtime type declarations
   extension/                ← Chrome extension (Manifest V3) — gem extractor
-    manifest.json           ← v0.10.0 — edit-page DOM extraction + silent Drive link capture
+    manifest.json           ← v0.9.7 — edit-page DOM extraction + silent Drive link capture
     background.js           ← service worker: gem storage, message routing, SPA comms protocol
     content-script.js       ← FAB + overlay on gem edit pages, reads DOM fields + captures Drive URLs
     page-script.js          ← MAIN world script (stub — reserved for future network interception)
@@ -87,7 +63,6 @@ gem-factory/
     popup.js                ← popup logic
     styles.css              ← FAB, modal overlay, and knowledge list styles
     icons/                  ← placeholder PNGs (blue diamond)
-  media/                    ← media assets (source logo files, etc.)
   voicecode-bbs/            ← separate project — VoiceCode BBS (Python curses app)
     CLAUDE.md               ← its own Claude Code instructions
   prompts/history/          ← prompt/response history from development sessions
@@ -98,61 +73,11 @@ gem-factory/
 - `docs/context/ARCH.md` — full architecture: Chrome extension, SPA, backend API, Cloud SQL schema, data flows, extension points
 - `docs/specs/chrome-extension-gem-extractor-SPEC.md` — detailed spec for the Chrome extension
 - `docs/specs/api-server-SPEC.md` — spec for the backend API server
-- `docs/specs/spa-frontend-SPEC.md` — spec for the frontend SPA
+- `docs/specs/spa-frontend-SPEC.md` — spec for the frontend SPA (not yet built)
 - `docs/specs/authentication-authorization-SPEC.md` — auth spec covering extension, API, and SPA
 - `docs/plans/chrome-extension-gem-extractor-PLAN.md` — implementation plan for the extension (partially executed)
 - `docs/plans/api-server-PLAN.md` — implementation plan for the API server (executed)
-- `docs/plans/spa-frontend-PLAN.md` — implementation plan for the SPA
-
-## Frontend SPA (`frontend/`)
-
-**Status: Built and working.** React + TypeScript SPA branded as the Schnucks Gem Registry, using Vite for dev/build and Tailwind CSS v4 for styling.
-
-**Schnucks branding:**
-- Logo displayed in header nav and sign-in page (`public/schnucks-logo.png`)
-- Custom Schnucks red theme defined in `index.css` via `@theme`: `--color-schnucks-red: #E31837`, `--color-schnucks-red-dark: #C41430`
-- Active nav links, focus rings, and interactive text use Schnucks red
-- Page title: "Schnucks Gem Registry"
-
-**To run locally:**
-1. `make spa-install` — install npm dependencies (auto-runs if needed by `spa-dev`)
-2. `make spa-dev` — start Vite dev server on port 3000 (proxies `/api` to `localhost:9090`)
-3. `make spa-build` — production build to `server/public/`
-
-**Pages and routing (`App.tsx`):**
-
-| Path | Page | Description |
-|------|------|-------------|
-| `/` | Dashboard | User's own gems in a compact table + org stats cards |
-| `/registry` | Registry | All gems with search, owner filter, pagination (50/page) |
-| `/gems/:id` | GemDetail | Single gem: instructions, knowledge files, tools, delete |
-| `*` | NotFound | 404 page |
-
-**Key components:**
-- `Layout.tsx` — header with Schnucks logo, "Gem Registry" label, nav links (Dashboard, Registry), user avatar + sign-out
-- `GemTable.tsx` — compact table view shared by Dashboard and Registry. Columns: Name, Owner, Description, Docs count, Tools, Import date. Responsive — columns hide progressively on smaller screens
-- `SearchBar.tsx` — debounced search input (300ms delay)
-- `Pagination.tsx` — page controls showing record range (e.g. "1–50 of 234")
-
-**Auth flow:**
-- Google Sign-In via Google Identity Services (GIS) library
-- `AuthProvider.tsx` manages token lifecycle with auto-refresh 5 min before expiry
-- Dev bypass: when `VITE_GOOGLE_CLIENT_ID` is empty, auto-authenticates as `dev@localhost`
-- Protected routes redirect to sign-in page when unauthenticated
-
-**API client (`api/client.ts`):**
-- `apiRequest<T>()` — fetch wrapper with Bearer token, JSON content type, 401 refresh handling
-- Functions: `importGems()`, `listGems()`, `getGem()`, `deleteGem()`, `listUsers()`, `getStats()`
-
-**Extension integration (`extension/useExtension.ts`):**
-- Sends `GET_GEMS` / `CLEAR_GEMS` messages to the Chrome extension via `chrome.runtime.sendMessage`
-- Extension ID configured via `VITE_EXTENSION_ID` env var
-
-**Key conventions:**
-- Tailwind v4 with `@tailwindcss/vite` plugin (no separate config file — theme defined in `index.css` via `@theme`)
-- React 19, React Router 7.5, TypeScript 5.7, Vite 6.3
-- ES modules throughout (`"type": "module"` in `package.json`)
-- Build output goes to `../server/public/` for the API server to serve as static files
+- `docs/plans/spa-frontend-PLAN.md` — implementation plan for the SPA (not yet started)
 
 ## API server (`server/`)
 
@@ -167,10 +92,8 @@ gem-factory/
 6. `make api-logs` — tail server logs
 
 **Architecture:**
-- `server.js` → CORS middleware → auth middleware → route handlers → services → db repositories
-- CORS allows `localhost:3000`, `localhost:5173`, and `chrome-extension://` origins
+- `server.js` → auth middleware → route handlers → services → db repositories
 - Migrations run on startup via `db/migrate.js` (custom runner, tracks applied files in `schema_migrations` table)
-- SPA fallback: serves `public/index.html` for non-API routes (when production build is present)
 - ES modules throughout (`"type": "module"` in `package.json`)
 - Dependencies: `express`, `pg`, `google-auth-library`
 
@@ -201,7 +124,7 @@ gem-factory/
 
 ## Chrome extension (`extension/`)
 
-**Current approach (v0.10.0):** Extract one gem at a time from the gem **edit** page, with silent Drive link capture for knowledge documents.
+**Current approach (v0.9.7):** Extract one gem at a time from the gem **edit** page, with silent Drive link capture for knowledge documents.
 
 **What it extracts (all from DOM — no API calls):**
 - **Gem name** — from the first `<input>` field on the edit page
@@ -228,7 +151,7 @@ gem-factory/
 
 **Key conventions:**
 - No build step, no npm, no bundler — pure browser APIs only
-- Manifest V3 with `host_permissions` on `gemini.google.com/*`, `localhost:9090/*`, and `*.run.app/*`
+- Manifest V3 with `host_permissions` on `gemini.google.com/*`
 - Version in `manifest.json` should be bumped on each testable change
 - `page-script.js` runs in the `MAIN` world (for future network interception); `content-script.js` runs in the isolated world
 - XSS prevention: use `textContent`, never `innerHTML`, for user-supplied data
@@ -245,7 +168,6 @@ gem-factory/
 - Connection configured via `.db-config` (created by `make db-init`, gitignored — never commit credentials)
 - `.db-config` format: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` — sourced by Makefile to construct `DATABASE_URL`
 - Schema applied automatically on server startup via `server/db/migrate.js`
-- Migrations: `001_initial_schema.sql` (users, gems, duplicate_clusters, duplicate_cluster_members), `002_add_gem_metadata.sql` (metadata columns)
 - Tables: `users`, `gems` (with generated `tsvector` search column), `duplicate_clusters`, `duplicate_cluster_members`
 - Key indexes: `idx_gems_owner`, `idx_gems_hash`, `idx_gems_search` (GIN), `idx_gems_owner_hash` (unique, enables upsert dedup)
 - `make db-init` — interactive database config (saves to `.db-config`)
@@ -271,9 +193,6 @@ All commands: `make help`. Key targets:
 - `make api-logs` — tail API server logs
 - `make db-init` — interactive database config (standalone, non-Docker)
 - `make db-test` — test database connection and check privileges
-- `make spa-install` — install SPA frontend npm dependencies
-- `make spa-dev` — start SPA dev server on port 3000 (auto-installs if needed)
-- `make spa-build` — production build SPA to `server/public/`
 - `make voicecode` — launch the VoiceCode BBS app (separate project)
 
 The Makefile uses `SHELL := /bin/bash` (required for `read -s` and config sourcing).
@@ -284,8 +203,43 @@ A separate Python curses application that lives in this repo. It has its own `CL
 
 ## Conventions
 
-- The SPA frontend is built and functional (`frontend/`) — branded as the Schnucks Gem Registry
-- The API server is built and functional (`server/`)
-- The Chrome extension is built and functional (`extension/`)
+- The SPA frontend is not yet built — see `docs/specs/spa-frontend-SPEC.md` and `docs/plans/spa-frontend-PLAN.md` for the planned React + TypeScript + Vite + Tailwind implementation
+- The API server exists and is functional (`server/`)
+- The Chrome extension exists and is functional (`extension/`)
 - Docs follow a type/frontmatter convention: `type: arch|spec|plan|drift-report`
 - Plans go in `docs/plans/`, specs in `docs/specs/`, architecture in `docs/context/`
+</document>
+
+## Instructions
+
+1. **Read the actual code.** Use your tools to explore files, grep for patterns, and read implementations. Do not rely solely on the embedded content — verify every claim against the live codebase.
+
+2. **Use git history for context.** Run `git log --oneline -30` and `git diff HEAD~10..HEAD --stat` to understand recent changes. This helps you identify what's new, what's been renamed, and what's been removed.
+
+3. **Preserve structure and voice.** Keep the same section headings, organizational hierarchy, and writing style. The document should feel like a natural update, not a rewrite from scratch.
+
+4. **Update all facts:**
+   - File paths and directory structure
+   - Module, class, and function names
+   - Architecture descriptions and data flows
+   - Configuration values and environment variables
+   - Dependencies and integration points
+   - UI descriptions and keyboard shortcuts
+
+5. **Add missing coverage.** If new modules, features, or subsystems have been added since the last update and they fall within this document's scope, add them in the appropriate section following the existing style.
+
+6. **Remove obsolete content.** If the document describes code or features that no longer exist, remove those references cleanly. Don't annotate removals — just take them out.
+
+7. **Cross-reference sibling context files.** If this is AGENTS.md, ensure references to CLAUDE.md and GEMINI.md are accurate. If this is CLAUDE.md or GEMINI.md, ensure it complements (not duplicates) AGENTS.md.
+
+## Output
+
+Overwrite the file at `CLAUDE.md` with the updated content. Do not create a new file — write directly to the existing path. Git provides rollback if needed.
+
+## Guidelines
+
+- **Accuracy over completeness.** It's better to omit something than to include a wrong claim. AI agents will trust this file.
+- **Be specific.** Reference actual file paths, class names, and module structure — vague descriptions are unhelpful for agents navigating the codebase.
+- **Keep it maintainable.** Write at the right level of abstraction. Don't list every function — describe the architecture and key entry points.
+- **Minimize churn.** Don't rewrite sections that are already accurate. Only change what needs changing so the git diff stays reviewable.
+

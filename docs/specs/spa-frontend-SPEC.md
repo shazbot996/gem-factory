@@ -1,60 +1,61 @@
 ---
 type: spec
-title: "Gem Factory SPA — Frontend Client Application"
-scope: Single-page application for authentication, gem import, registry browsing, and search
-date: 2026-04-05
+title: "Schnucks Gem Registry SPA — Frontend Client Application"
+scope: Single-page application for authentication, gem registry browsing, search, and detail views — branded as the Schnucks Gem Registry
+date: 2026-04-15
 ---
 
 ## 1. Problem Statement
 
-Gem Factory has a working Chrome extension (`extension/`, v0.3.0) that extracts gem configurations from Gemini edit pages and stores them in `chrome.storage.local`, and a working backend API (`server/`, Express on port 9090) that accepts gem imports, deduplicates them, and provides CRUD + search endpoints. What's missing is the user-facing web application that ties these together.
+Gem Factory has a working Chrome extension (`extension/`, v0.10.0) that extracts gem configurations from Gemini edit pages and stores them in `chrome.storage.local`, and a working backend API (`server/`, Express on port 9090) that accepts gem imports, deduplicates them, and provides CRUD + search endpoints. The SPA is the user-facing web application that ties these together.
 
 Without the SPA:
 - Users have no way to authenticate with the Gem Factory service.
-- Extracted gems sit in the extension's local storage with no path to the central registry.
+- Extracted gems sit in the extension's local storage with no path to the central registry (beyond the extension popup's direct server save).
 - There is no interface for browsing, searching, or discovering gems across the organization.
 - The core value proposition — a shared, searchable gem catalog — has no front door.
 
-The SPA is the final critical-path component that completes the Phase 1 system: extension → SPA → API → database.
+The SPA completes the Phase 1 system: extension → API → database → SPA.
 
 ## 2. Goals & Non-Goals
 
 ### Goals
 
 - Authenticate users via Google Identity Services (GIS), obtaining an ID token scoped to the corporate domain for API calls.
-- Detect the Chrome extension and retrieve extracted gems via `chrome.runtime.sendMessage` using the `GET_GEMS` / `CLEAR_GEMS` protocol already implemented in `extension/background.js`.
-- Provide a manual import fallback for users without the extension.
-- Display an import preview where users confirm which gems to send to `POST /api/gems/import`.
+- Provide a personal dashboard showing the authenticated user's imported gems and org-wide statistics.
 - Provide a registry browser with full-text search, owner filtering, and pagination — consuming `GET /api/gems`, `GET /api/gems/:id`, and `GET /api/stats`.
-- Show a dashboard landing page with the authenticated user's imported gems and org-wide statistics.
-- Be served as static assets from the same Cloud Run service that hosts the API (via Express static middleware in `server/server.js`).
+- Show gem detail views with full instructions, knowledge files, enabled tools, and owner actions (copy, delete).
+- Be served as static assets from the same Express service that hosts the API (via `express.static` in `server/server.js`).
+- Be branded as the **Schnucks Gem Registry** with Schnucks Markets' red color theme.
 
 ### Non-Goals
 
+- **Import UI.** Gem import is handled by the Chrome extension's popup ("Save to Gem Factory" button) or the extension's `GET_GEMS`/`CLEAR_GEMS` messaging protocol. The SPA does not provide its own import form.
 - **Review workflows (Phase 2).** No approval queues, reviewer roles, or status transitions beyond what the API already supports.
 - **Gem-to-Enterprise-Agent promotion (Phase 3).** No promotion UI.
 - **Admin panel.** Admin operations (status changes, user management) are API-only for Phase 1.
 - **Offline support or PWA capabilities.** The app requires network access to the API.
 - **Mobile-optimized layout.** Desktop-first; responsive enough not to break on tablets, but mobile is not a target.
-- **Custom design system or component library.** Use a lightweight, off-the-shelf CSS framework or utility library.
 - **Server-side rendering.** The SPA is fully client-rendered; the server returns `index.html` for all non-API routes.
 
 ## 3. Proposed Solution
 
-Build a React + TypeScript single-page application using Vite as the build tool. The built assets are placed in a directory that the Express server in `server/server.js` serves as static files. During development, Vite's dev server proxies `/api/*` requests to the Express backend on port 9090.
+A React + TypeScript single-page application using Vite as the build tool and Tailwind CSS v4 for styling. The built assets are placed in `server/public/` where the Express server serves them as static files. During development, Vite's dev server proxies `/api/*` requests to the Express backend on port 9090.
 
 **Why React + TypeScript:** The architecture document (`docs/context/ARCH.md` section 3.2) suggests "React or similar." React is the most widely known frontend framework in corporate environments, TypeScript catches integration bugs at build time (especially around the API response shapes), and both have excellent Vite support.
 
 **Why Vite:** Zero-config for React+TS, fast HMR during development, produces optimized static assets for production. No webpack configuration to maintain.
 
-**Why no heavier framework (Next.js, Remix):** The app is a straightforward client-rendered SPA with no SEO requirements and no server-side data fetching needs. A full-stack framework adds complexity without benefit. The Express server already exists and will serve the static build.
+**Why Tailwind CSS v4:** Utility-first styling with no separate configuration file — theme is defined inline in `index.css` via `@theme`. Schnucks brand colors are declared as CSS custom properties.
+
+**Why no heavier framework (Next.js, Remix):** The app is a straightforward client-rendered SPA with no SEO requirements and no server-side data fetching needs. A full-stack framework adds complexity without benefit. The Express server already exists and serves the static build.
 
 ### Key user workflows
 
-1. **Sign in** → Google Identity Services button → ID token obtained → stored in memory.
-2. **Import gems** → SPA detects extension → retrieves gems → shows preview → user confirms → `POST /api/gems/import` → clear extension storage.
-3. **Browse registry** → search bar + filters → paginated gem cards → click through to detail view.
-4. **View dashboard** → user's own gems + org stats on the landing page.
+1. **Sign in** → Google Identity Services button → ID token obtained → stored in React state.
+2. **Dashboard** → user's own gems in a compact table + org-wide statistics.
+3. **Browse registry** → search bar + owner filter → paginated table → click through to detail view.
+4. **View gem detail** → full instructions, knowledge files with Drive links, enabled tools, copy/delete actions.
 
 ## 4. Technical Design
 
@@ -63,55 +64,60 @@ Build a React + TypeScript single-page application using Vite as the build tool.
 ```
 gem-factory/
   frontend/
-    index.html
-    package.json
-    tsconfig.json
-    vite.config.ts
+    index.html              # Entry HTML ("Schnucks Gem Registry"), loads GIS script
+    package.json            # React 19, React Router 7.5, Tailwind 4.1, Vite 6.3
+    tsconfig.json           # References tsconfig.app.json and tsconfig.node.json
+    tsconfig.app.json       # ES2020 target, react-jsx, strict mode
+    vite.config.ts          # Port 3000, /api proxy → localhost:9090, build → ../server/public/
+    .env.development        # VITE_GOOGLE_CLIENT_ID, VITE_EXTENSION_ID, VITE_API_BASE_URL
+    public/
+      schnucks-logo.png     # Schnucks Markets brand logo
     src/
-      main.tsx              # React entry point, mounts <App />
-      App.tsx               # Top-level router and auth provider
+      main.tsx              # React entry point, BrowserRouter + StrictMode + <App />
+      App.tsx               # AuthProvider + ProtectedRoutes + route definitions
+      index.css             # Tailwind v4 import + Schnucks brand theme (@theme)
+      vite-env.d.ts         # Vite environment type declarations
       auth/
-        AuthProvider.tsx     # React context for auth state (token, user info)
-        useAuth.ts           # Hook exposing sign-in, sign-out, token, user
-        GoogleSignIn.tsx     # GIS button component
+        AuthProvider.tsx     # React context: GIS integration, token lifecycle, dev bypass
+        useAuth.ts           # Hook: user, token, isAuthenticated, signOut, isLoading
+        GoogleSignIn.tsx     # GIS renderButton component
+        gis.d.ts             # Google Identity Services type declarations
       api/
-        client.ts            # fetch wrapper: base URL, Bearer token injection, error handling
-        gems.ts              # Typed API functions: importGems, listGems, getGem, etc.
+        client.ts            # fetch wrapper: Bearer token, 401 refresh, ApiError class
+        gems.ts              # importGems, listGems, getGem, deleteGem
         users.ts             # getMe, listUsers
         stats.ts             # getStats
-        types.ts             # TypeScript interfaces matching API response shapes
+        types.ts             # Gem, KnowledgeFile, GemOwner, Stats, ImportResult, etc.
       extension/
         useExtension.ts      # Hook: detect extension, getGems, clearGems
+        chrome.d.ts          # Chrome runtime type declarations
       pages/
-        Dashboard.tsx        # Landing page: user gems + org stats
-        Import.tsx           # Import flow: extension detection, preview, confirm
-        Registry.tsx         # Browse/search gem catalog
-        GemDetail.tsx        # Single gem view
+        Dashboard.tsx        # User's gems (GemTable) + org stats cards
+        Registry.tsx         # Full catalog: search, owner filter, pagination (50/page)
+        GemDetail.tsx        # Single gem: instructions, knowledge files, tools, delete
         NotFound.tsx         # 404 fallback
       components/
-        Layout.tsx           # App shell: nav bar, content area
-        GemCard.tsx          # Gem summary card (used in Registry and Dashboard)
-        SearchBar.tsx        # Search input with debounce
-        Pagination.tsx       # Page controls
-        ImportPreview.tsx    # Gem list with checkboxes for selective import
-        ManualImportForm.tsx # Paste name + instructions for manual import
-        EmptyState.tsx       # Placeholder for empty lists
+        Layout.tsx           # Header: Schnucks logo, "Gem Registry", nav, user profile
+        GemTable.tsx         # Compact table view (shared by Dashboard and Registry)
+        GemCard.tsx          # Card view component (legacy, not currently used by any page)
+        SearchBar.tsx        # Debounced search input (300ms)
+        Pagination.tsx       # Page controls with record range display
+        EmptyState.tsx       # Empty state message
 ```
 
 ### 4.2 Build and Development Setup
 
 **`frontend/package.json`** dependencies:
-- `react`, `react-dom` — UI framework
-- `react-router-dom` — client-side routing
-- `@anthropic-ai/sdk` is NOT used — this is a Google Identity project
-- Dev dependencies: `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`
+- `react` ^19.0.0, `react-dom` ^19.0.0 — UI framework
+- `react-router-dom` ^7.5.0 — client-side routing
+- Dev dependencies: `vite` ^6.3.0, `@vitejs/plugin-react` ^4.4.0, `typescript` ~5.7.0, `tailwindcss` ^4.1.0, `@tailwindcss/vite` ^4.1.0, `@types/react` ^19.0.0, `@types/react-dom` ^19.0.0
 
-No additional UI library is required initially. Use plain CSS (or CSS modules) for styling. If a utility framework is desired later, Tailwind CSS can be added without architectural changes.
+ES modules throughout (`"type": "module"` in `package.json`).
 
 **`frontend/vite.config.ts`:**
 ```typescript
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 3000,
     proxy: {
@@ -126,36 +132,48 @@ export default defineConfig({
 ```
 
 Key decisions:
-- **Dev port 3000** — standard React dev port, avoids conflict with API on 9090.
-- **Proxy `/api` to 9090** — during development, the Vite dev server forwards API calls to the Express backend. No CORS configuration needed.
-- **Build output to `server/public/`** — production builds land where the Express server can serve them. This directory should be gitignored.
+- **Dev port 3000** — avoids conflict with API on 9090.
+- **Proxy `/api` to 9090** — during development, the Vite dev server forwards API calls to the Express backend. No CORS configuration needed in dev.
+- **Build output to `../server/public/`** — production builds land where the Express server can serve them.
+- **Tailwind CSS plugin** — `@tailwindcss/vite` for v4 integration, no separate config file needed.
 
-### 4.3 Static File Serving (Server-Side Change)
+**Makefile targets:**
+- `make spa-install` — `npm install` in `frontend/`
+- `make spa-dev` — starts Vite dev server (auto-installs if `node_modules` missing)
+- `make spa-build` — production build to `server/public/`
 
-`server/server.js` needs one addition to serve the SPA in production:
+### 4.3 Static File Serving (Server-Side)
+
+`server/server.js` serves the SPA in production. After all `/api/*` routes:
 
 ```javascript
-// After API routes, serve SPA static files
-app.use(express.static('public'));
-// SPA fallback — all non-API routes return index.html for client-side routing
-app.get('*', (req, res) => res.sendFile('index.html', { root: 'public' }));
+const publicDir = path.join(__dirname, 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
 ```
 
-This must come after all `/api/*` routes so API paths are not intercepted by the static file middleware.
+The SPA fallback returns `index.html` for all non-API routes, enabling client-side routing. If no `public/` directory exists (no build present), the server returns a JSON identity response at `GET /`.
 
 ### 4.4 Authentication
 
 The SPA uses the Google Identity Services (GIS) JavaScript library to authenticate users.
 
-**Flow:**
-1. Load the GIS library via a `<script>` tag in `index.html` (`https://accounts.google.com/gsi/client`).
-2. `AuthProvider.tsx` initializes `google.accounts.id.initialize()` with the `GOOGLE_CLIENT_ID` (injected as a Vite environment variable `VITE_GOOGLE_CLIENT_ID`).
-3. The sign-in button renders via `google.accounts.id.renderButton()` or a custom `GoogleSignIn.tsx` component.
+**Flow (implemented in `auth/AuthProvider.tsx`):**
+1. The GIS library is loaded via a `<script>` tag in `index.html` (`https://accounts.google.com/gsi/client`).
+2. `AuthProvider` waits for the `google` global to be available, then calls `google.accounts.id.initialize()` with the `VITE_GOOGLE_CLIENT_ID` and `auto_select: true`.
+3. `google.accounts.id.prompt()` triggers the One Tap / auto-select flow.
 4. On successful sign-in, GIS returns a JWT credential (ID token).
-5. `AuthProvider` stores the token in React state (not localStorage — tokens are short-lived) and decodes the payload to extract `email`, `name`, `picture`, and `hd`.
-6. The `useAuth` hook exposes `{ user, token, isAuthenticated, signIn, signOut }` to all components.
-7. `api/client.ts` reads the token from the auth context and attaches it as `Authorization: Bearer <token>` on every API call.
-8. GIS handles silent re-authentication via the One Tap flow or session cookies. If the token expires and re-auth fails, the SPA redirects to the sign-in page.
+5. `AuthProvider` decodes the JWT payload (via `decodeJwtPayload()`) to extract `email`, `name`, `picture`, and `hd`. The token and user object are stored in React state.
+6. The token is passed to `api/client.ts` via `setToken()`, which attaches it as `Authorization: Bearer <token>` on every API call.
+7. A refresh timer is set to fire 5 minutes before the token's `exp` claim. If a 401 occurs during an API call, the client catches it and attempts one token refresh via `google.accounts.id.prompt()` before failing.
+
+**Development bypass mode:** When `VITE_GOOGLE_CLIENT_ID` is empty (the default in `.env.development`), `AuthProvider` skips GIS entirely and auto-authenticates as `dev@localhost` with a placeholder token. This allows local development without Google OAuth configuration.
+
+**Sign-out:** Calls `google.accounts.id.revoke()` with the user's email, clears the token and user state, and resets the API client token.
 
 **Domain enforcement:** The GIS configuration can restrict sign-in to a specific hosted domain. Additionally, the backend's `middleware/auth.js` validates the `hd` claim, so even if a non-corporate user somehow obtains a token, the API rejects it with 403.
 
@@ -163,17 +181,9 @@ The SPA uses the Google Identity Services (GIS) JavaScript library to authentica
 
 `extension/useExtension.ts` provides a React hook for communicating with the Chrome extension.
 
-**Detection:** The hook calls `chrome.runtime.sendMessage(EXTENSION_ID, { type: 'GET_GEMS' })` and checks whether the callback receives a response. If `chrome.runtime` is undefined or the call throws, the extension is not installed. The `EXTENSION_ID` is a Vite environment variable (`VITE_EXTENSION_ID`).
+**Detection:** The hook calls `chrome.runtime.sendMessage(EXTENSION_ID, { type: 'GET_GEMS' })` on mount. If `chrome.runtime` is undefined or the call throws, the extension is not available. The `EXTENSION_ID` comes from the `VITE_EXTENSION_ID` environment variable.
 
-**Important:** The extension's `manifest.json` currently lacks an `externally_connectable` key. For the SPA to send messages via `chrome.runtime.sendMessage`, the manifest must declare:
-
-```json
-"externally_connectable": {
-  "matches": ["https://gem-factory.corp.example.com/*", "http://localhost:3000/*"]
-}
-```
-
-This is a required change to `extension/manifest.json` before the SPA can communicate with the extension.
+The extension's `manifest.json` declares `externally_connectable` with `http://localhost:3000/*`, enabling SPA-to-extension messaging in development.
 
 **Hook interface:**
 ```typescript
@@ -187,8 +197,6 @@ interface UseExtensionResult {
 }
 ```
 
-**Gem data mapping:** The extension stores gems with the shape `{ id, name, description, instructions, knowledgeFiles, extractedAt, source }` (as seen in `extension/content-script.js:90-99`). The API import endpoint expects `{ name, instructions, icon?, source? }` (as seen in `server/routes/gems.js:25-35`). The SPA maps between these in the import flow, setting `source: 'extension'`.
-
 ### 4.6 API Client Layer
 
 `api/client.ts` provides a typed fetch wrapper:
@@ -197,39 +205,59 @@ interface UseExtensionResult {
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T>
 ```
 
-- Prepends `/api` to the path (in development, Vite proxies this; in production, it hits the same origin).
-- Reads the auth token from context and sets the `Authorization` header.
-- Sets `Content-Type: application/json` for request bodies.
-- Throws typed errors for non-2xx responses (with the error message from the JSON body).
-- Handles 401 by triggering re-authentication.
+- Uses `VITE_API_BASE_URL` as the base (defaults to empty string, meaning same-origin).
+- Reads the current token from module-level state (set by `AuthProvider` via `setToken()`) and sets the `Authorization: Bearer` header.
+- Sets `Content-Type: application/json` for POST/PUT/PATCH request bodies.
+- Returns `undefined` for 204 No Content responses.
+- Throws `ApiError` (custom class with `status` property) for non-2xx responses, extracting the error message from the JSON body.
+- Handles 401 by calling `refreshTokenFn` (set by `AuthProvider` via `setRefreshToken()`) and retrying once before re-throwing.
 
 `api/types.ts` defines TypeScript interfaces matching the API's response shapes:
 
 ```typescript
+interface GemOwner { id: string; email: string; displayName: string }
+
+interface KnowledgeFile {
+  name: string; type: string; mimeType: string;
+  driveId: string | null; driveUrl: string | null;
+}
+
 interface Gem {
   id: string;
   name: string;
+  description: string | null;
   instructions: string;
   icon: string | null;
   source: string;
   status: string;
-  owner: { id: string; email: string; displayName: string };
+  geminiId: string | null;
+  knowledgeFiles: KnowledgeFile[];
+  defaultTools: string[];
+  owner: GemOwner;
   importedAt: string;
   updatedAt: string;
+  extractedAt: string | null;
   duplicateCluster: { id: string; gemCount: number } | null;
-}
-
-interface ImportResult {
-  imported: number;
-  skipped: number;
-  duplicates: number;
-  gemIds: string[];
 }
 
 interface GemListResponse {
   gems: Gem[];
   pagination: { page: number; limit: number; total: number };
 }
+
+interface ImportResult {
+  imported: number;
+  updated: number;
+  skipped: number;
+  importedIds: string[];
+}
+
+interface UserProfile {
+  id?: string; email: string; displayName: string;
+  gemCount: number; firstImportAt: string | null; lastImportAt: string | null;
+}
+
+interface UserListItem { id: string; email: string; displayName: string; gemCount: number }
 
 interface Stats {
   totalGems: number;
@@ -238,89 +266,106 @@ interface Stats {
   duplicateClusters: number;
   topClusters: { id: string; representativeName: string; gemCount: number }[];
 }
+
+interface ExtractedGem {
+  id: string; name: string; description: string; instructions: string;
+  knowledgeFiles: KnowledgeFile[]; defaultTools: string[];
+  extractedAt: string; source: string;
+}
 ```
+
+**API functions:**
+
+| Module | Function | Endpoint |
+|--------|----------|----------|
+| `gems.ts` | `importGems(gems[])` | `POST /api/gems/import` |
+| `gems.ts` | `listGems({ q?, owner?, status?, page?, limit? })` | `GET /api/gems` |
+| `gems.ts` | `getGem(id)` | `GET /api/gems/:id` |
+| `gems.ts` | `deleteGem(id)` | `DELETE /api/gems/:id` |
+| `users.ts` | `getMe()` | `GET /api/users/me` |
+| `users.ts` | `listUsers()` | `GET /api/users` |
+| `stats.ts` | `getStats()` | `GET /api/stats` |
 
 ### 4.7 Routing
 
-React Router with these routes:
+React Router v7.5 with these routes (defined in `App.tsx`):
 
 | Path | Component | Auth Required | Description |
 |------|-----------|--------------|-------------|
 | `/` | `Dashboard` | Yes | User's gems + org stats |
-| `/import` | `Import` | Yes | Extension/manual import flow |
 | `/registry` | `Registry` | Yes | Browse and search all gems |
 | `/gems/:id` | `GemDetail` | Yes | Single gem detail view |
 | `*` | `NotFound` | No | 404 page |
 
-Unauthenticated users are redirected to a sign-in page (either a dedicated route or a full-page sign-in overlay on `/`).
+Unauthenticated users see a `SignInPage` component (defined inline in `App.tsx`) with the Schnucks logo, "Gem Registry" title, and `GoogleSignIn` button.
+
+### 4.8 Schnucks Branding
+
+The SPA is branded as the **Schnucks Gem Registry**:
+
+- **Logo:** `public/schnucks-logo.png` displayed in the header nav and sign-in page.
+- **Page title:** "Schnucks Gem Registry" (set in `index.html`).
+- **Color theme** (defined in `index.css` via Tailwind v4 `@theme`):
+  - `--color-schnucks-red: #E31837` — primary accent for active nav links, focus rings, interactive text
+  - `--color-schnucks-red-dark: #C41430` — hover states
+  - `--color-schnucks-red-light: #FEF2F2` — active nav background
+- **Typography:** System font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`).
 
 ## 5. UI / UX
 
 ### 5.1 Layout
 
-A persistent top navigation bar with:
-- **Logo / App name** ("Gem Factory") — links to `/`.
-- **Nav links:** Dashboard, Import, Registry.
+A persistent top navigation bar (`Layout.tsx`) with:
+- **Logo area (left):** Schnucks logo image + "Gem Registry" text label — links to `/`.
+- **Nav links:** Dashboard, Registry. Active link styled with Schnucks red background/text.
 - **User area (right):** Avatar (from Google profile picture), display name, sign-out button.
 
-Content area below the nav bar, max-width constrained (e.g., 1200px) and centered.
+Content area below the nav bar, max-width constrained (`max-w-7xl`) and centered.
 
 ### 5.2 Dashboard (`/`)
 
 Two sections:
 
-**My Gems** — a list or grid of the user's imported gems (fetched via `GET /api/gems?owner=<user-email>`). Each gem is rendered as a `GemCard` showing name, truncated instructions (first 100 chars), import date, and duplicate indicator. If the user has no gems, show an `EmptyState` with a call-to-action linking to `/import`.
+**My Gems** — a compact table of the user's imported gems (fetched via `listGems({ owner: user.email, limit: 200 })`). Rendered as a `GemTable` with `showOwner={false}`. Shows gem count above the table. If the user has no gems, shows an `EmptyState` with the message "You don't have any gems in the registry yet."
 
-**Org Overview** — stats from `GET /api/stats`: total gems, unique gems, total contributors, duplicate clusters. Displayed as a row of stat cards. Optionally includes the top duplicate clusters as a list.
+**Org Overview** — stats from `getStats()`: Total Gems, Unique Gems, Contributors, Duplicate Clusters. Displayed as a row of four `StatCard` components.
 
-### 5.3 Import Flow (`/import`)
+### 5.3 Registry (`/registry`)
 
-Three states:
+- **Header row:** "Gem Registry" title with total gem count.
+- **Filter row:** `SearchBar` (full-text search, debounced 300ms) and owner dropdown (populated from `listUsers()`). Both reset to page 1 on change.
+- **Results table:** `GemTable` with `showOwner={true}`. Columns: Name, Owner, Description, Docs count, Tools, Imported date. Responsive — columns hide progressively on smaller screens.
+- **Pagination:** `Pagination` component showing record range (e.g., "1–50 of 234") with Previous/Next buttons. Page size: 50.
+- **URL-synced state:** Search query (`q`), owner filter (`owner`), and page number (`page`) are stored in URL search params via `useSearchParams`, making the state shareable and bookmarkable.
+- **Empty state** when no results match: "No gems match your search."
 
-**1. Extension detected, gems available:**
-- Header: "Import Gems from Gemini"
-- Gem count badge: "N gems ready to import"
-- `ImportPreview` component: list of extracted gems with checkboxes (all selected by default). Each row shows gem name, instruction preview, extraction timestamp.
-- "Import Selected" primary button → calls `POST /api/gems/import` → shows result summary (imported/skipped/duplicate counts) → calls `CLEAR_GEMS` on the extension.
-- "Refresh" button to re-fetch from extension.
+### 5.4 Gem Detail (`/gems/:id`)
 
-**2. Extension detected, no gems:**
-- Message: "No gems found in the extension. Open a gem's edit page in Gemini and click the blue button to extract it."
+Full view of a single gem from `getGem(id)`:
+- **Back link:** "← Back" linking to `/` (if owner) or `/registry` (if not owner). Styled in Schnucks red.
+- **Header:** Gem name, source badge (gray pill), description, metadata row (owner, import date, status, extraction timestamp if available).
+- **Duplicate cluster warning** (if present): amber text noting the cluster size.
+- **Instructions:** Full text in a scrollable `<pre>` block (max height 24rem) with a "Copy Instructions" button (Schnucks red) that shows "Copied!" feedback for 2 seconds.
+- **Knowledge Documents** (if any): Bordered list with emoji icon per mime type, file name, type label, and "Open in Drive" link (Schnucks red) for files with captured Drive URLs.
+- **Enabled Tools** (if any): Purple pill badges listing each tool.
+- **Actions:** Owner sees a red "Delete Gem" button with confirmation dialog.
 
-**3. Extension not detected:**
-- Message explaining how to install the extension (link to corporate Chrome Web Store or developer mode instructions).
-- Below: `ManualImportForm` — a form with two fields (gem name, instructions textarea) and an "Import" button. Optionally supports a JSON paste mode for batch import.
+### 5.5 State Transitions and Feedback
 
-### 5.4 Registry (`/registry`)
-
-- **Search bar** at the top — full-text search with debounce (300ms). Fires `GET /api/gems?q=<term>`.
-- **Filter row** below the search bar — owner dropdown (populated from `GET /api/users`), status filter (if applicable).
-- **Results grid** — `GemCard` components. Each card shows: gem name, owner email, import date, instruction preview (first 100 chars), duplicate cluster badge (e.g., "3 similar").
-- **Pagination** at the bottom — page numbers or prev/next, using `page` and `limit` query params.
-- **Empty state** when no results match the search/filters.
-
-### 5.5 Gem Detail (`/gems/:id`)
-
-Full view of a single gem from `GET /api/gems/:id`:
-- **Header:** Gem name, owner info (email, avatar if available), import date, source badge ("extension" or "manual").
-- **Instructions:** Full instruction text in a styled, scrollable block. Monospace or proportional with good line height.
-- **Metadata:** Status, duplicate cluster info (with links to other gems in the same cluster).
-- **Actions:** "Copy Instructions" button (copies to clipboard). Owner sees "Delete" button.
-
-### 5.6 State Transitions and Feedback
-
-- **Loading states:** Skeleton loaders or spinners when data is being fetched.
-- **Import progress:** The import button shows a spinner while the POST is in flight. On success, show a summary toast or inline result. On failure, show the error message.
-- **Optimistic navigation:** Search input updates the URL query params (`/registry?q=...`) so the search state is shareable and survives page refresh.
-- **Error boundaries:** API errors display inline messages, not unhandled exceptions. Network failures show a retry prompt.
+- **Loading states:** "Loading..." text when data is being fetched.
+- **Error states:** Error messages displayed inline (red text) when API calls fail.
+- **Search debounce:** 300ms debounce in `SearchBar` before triggering API requests.
+- **URL-synced search:** Registry search state in URL query params (`/registry?q=...&page=...`), survives page refresh.
+- **Clipboard feedback:** "Copy Instructions" shows "Copied!" for 2 seconds on success.
+- **Delete confirmation:** Browser `confirm()` dialog before deleting a gem.
 
 ## 6. Integration Points
 
 ### 6.1 Chrome Extension
 
-The SPA communicates with the extension via `chrome.runtime.sendMessage` using the `EXTENSION_ID`. The extension's `background.js` already handles `GET_GEMS` and `CLEAR_GEMS` messages via `chrome.runtime.onMessageExternal` (lines 42-56).
+The SPA can communicate with the extension via `chrome.runtime.sendMessage` using the `VITE_EXTENSION_ID`. The extension's `background.js` handles `GET_GEMS` and `CLEAR_GEMS` messages via `chrome.runtime.onMessageExternal`. The extension's `manifest.json` declares `externally_connectable` for `http://localhost:3000/*`.
 
-**Required extension change:** Add `externally_connectable` to `extension/manifest.json` listing the SPA's origin(s). Without this, `chrome.runtime.sendMessage` from the SPA to the extension will fail silently.
+The `useExtension` hook (`extension/useExtension.ts`) provides the `fetchGems` and `clearGems` functions. This integration exists for potential future use but is not currently wired into any SPA page — gem import is handled by the extension popup's "Save to Gem Factory" button.
 
 ### 6.2 Backend API
 
@@ -328,29 +373,29 @@ All API calls go through the typed client in `api/client.ts`. The SPA consumes t
 
 | SPA Action | API Endpoint |
 |-----------|-------------|
-| Import gems | `POST /api/gems/import` |
 | List/search gems | `GET /api/gems?q=&owner=&status=&page=&limit=` |
 | View gem detail | `GET /api/gems/:id` |
 | Delete gem | `DELETE /api/gems/:id` |
-| Get current user | `GET /api/users/me` |
 | List users (for filter) | `GET /api/users` |
 | Get org stats | `GET /api/stats` |
 
+The `importGems()` API function exists in `api/gems.ts` but is not currently called by any SPA page.
+
 ### 6.3 Google Identity Services
 
-The GIS JavaScript library is loaded from Google's CDN. The SPA needs the OAuth Client ID configured for the corporate domain. This is provided via `VITE_GOOGLE_CLIENT_ID` at build time. The same client ID is used by the backend (`GOOGLE_CLIENT_ID` env var in `docker-compose.yml`) to validate tokens.
+The GIS JavaScript library is loaded from Google's CDN via a `<script>` tag in `index.html`. The SPA needs the OAuth Client ID configured for the corporate domain via `VITE_GOOGLE_CLIENT_ID` at build time. The same client ID is used by the backend (`GOOGLE_CLIENT_ID` env var in `docker-compose.yml`) to validate tokens.
 
 ### 6.4 Build Integration
 
-The production build output (`frontend/` → `server/public/`) means deployment is unchanged: a single Docker image containing the Express server and the pre-built SPA assets. The `server/Dockerfile` will need to be updated to include a frontend build step (or the build runs in CI before the Docker build).
+The production build output (`frontend/` → `server/public/`) means the Express server serves both the API and the SPA from a single process. `make spa-build` runs the Vite build, and the output lands in `server/public/` which the Express server automatically detects and serves.
 
 ### 6.5 Environment Variables
 
 | Variable | Where | Purpose |
 |----------|-------|---------|
-| `VITE_GOOGLE_CLIENT_ID` | Frontend build-time | OAuth client ID for GIS |
+| `VITE_GOOGLE_CLIENT_ID` | Frontend build-time | OAuth client ID for GIS. Empty = dev bypass mode. |
 | `VITE_EXTENSION_ID` | Frontend build-time | Chrome extension ID for messaging |
-| `VITE_API_BASE_URL` | Frontend build-time (optional) | Override API base URL; defaults to same-origin `/api` |
+| `VITE_API_BASE_URL` | Frontend build-time (optional) | Override API base URL; defaults to same-origin |
 
 ## 7. Edge Cases & Error Handling
 
@@ -358,90 +403,75 @@ The production build output (`frontend/` → `server/public/`) means deployment 
 
 | Condition | Behavior |
 |-----------|----------|
-| User not signed in | Redirect to sign-in page. No API calls attempted. |
-| ID token expires during session | API returns 401. SPA catches this, attempts silent re-auth via GIS. If that fails, redirect to sign-in. |
-| User signs in with non-corporate account | GIS can be configured to restrict domain. If a token somehow reaches the API, backend returns 403. SPA shows "Access restricted to your organization." |
-| Browser blocks third-party cookies | GIS One Tap may fail. Fall back to the explicit sign-in button flow. |
+| User not signed in | `ProtectedRoutes` shows `SignInPage` with GoogleSignIn button. No API calls attempted. |
+| ID token expires during session | API returns 401. `apiRequest` catches this, attempts token refresh via `google.accounts.id.prompt()`. If refresh succeeds, retries the request. If not, user must re-authenticate. |
+| User signs in with non-corporate account | GIS can be configured to restrict domain. If a token reaches the API with wrong domain, backend returns 403. |
+| `VITE_GOOGLE_CLIENT_ID` is empty | Dev bypass mode activates — auto-authenticates as `dev@localhost`. |
+| Browser blocks third-party cookies | GIS One Tap may fail. Fall back to the explicit sign-in button flow rendered by `GoogleSignIn`. |
 
-### 7.2 Extension Communication
-
-| Condition | Behavior |
-|-----------|----------|
-| Extension not installed | `chrome.runtime` is undefined or `sendMessage` returns no response. SPA hides extension import UI, shows manual import form and install prompt. |
-| Extension installed but `externally_connectable` missing | Same as not installed — `sendMessage` fails silently. The extension change is a prerequisite. |
-| Extension has no gems stored | `GET_GEMS` returns `{ gems: [] }`. Import page shows "no gems found" message with guidance. |
-| Extension returns stale gems | Gems were extracted days ago. Show extraction timestamps on the preview. Include a "Refresh" button that re-triggers `GET_GEMS`. |
-| Multiple browser profiles / extension instances | Each profile has its own extension instance and storage. The SPA interacts with whichever profile it's running in. |
-
-### 7.3 Import
+### 7.2 Search and Navigation
 
 | Condition | Behavior |
 |-----------|----------|
-| All gems are duplicates of the user's existing imports | API returns `{ imported: 0, skipped: N, duplicates: 0 }`. SPA shows "All gems already in your registry." |
-| Some gems match other users' gems | API returns a `duplicates` count. SPA shows "N gems matched existing gems from other users" in the import summary. |
-| Import request fails (500) | SPA shows error message. Does NOT clear extension storage — gems remain for retry. |
-| Manual import with empty instructions | Client-side validation prevents submission. Mirror the server's validation: name required, instructions required and non-empty. |
-| Very large instructions (>100KB) | Client-side validation warns before sending. Server rejects with 400 per `server/routes/gems.js:11`. |
+| Search returns no results | `EmptyState`: "No gems match your search." |
+| Gem detail for deleted or non-existent gem | `getGem` returns 404 (caught via `ApiError`). SPA shows "Gem not found." with a "Back to Registry" link. |
+| Direct URL access (deep link) | React Router handles it. Express SPA fallback serves `index.html` for all non-API paths. Auth check runs on mount. |
+| Rapid search input | Debounce at 300ms in `SearchBar` before calling `onChange`. |
 
-### 7.4 Search and Navigation
+### 7.3 Gem Operations
 
 | Condition | Behavior |
 |-----------|----------|
-| Search returns no results | Show empty state: "No gems match your search." with a suggestion to clear filters. |
-| Gem detail for deleted or non-existent gem | API returns 404. SPA shows "Gem not found" with a link back to the registry. |
-| Direct URL access (deep link) | React Router handles it. The Express SPA fallback serves `index.html` for all non-API paths. Auth check runs on mount; if unauthenticated, redirect to sign-in. |
-| Rapid search input | Debounce at 300ms before sending API requests. Show a loading indicator during the debounce period. |
+| Delete fails (500) | Error message displayed inline. Gem remains. |
+| Copy to clipboard fails | "Copy failed" text shown briefly on the button. |
+| User is not the gem owner | Delete button not shown. Back link goes to `/registry` instead of `/`. |
+| Gem has no knowledge files | Knowledge Documents section not rendered. |
+| Gem has no enabled tools | Enabled Tools section not rendered. |
 
 ## 8. Scope & Milestones
 
-### Milestone 1: Project scaffolding and authentication
+### Milestone 1: Project scaffolding and authentication ✓
 
-- Initialize `frontend/` with Vite + React + TypeScript.
-- `AuthProvider`, `useAuth` hook, GIS integration.
-- Sign-in page with Google button.
-- Basic `Layout` component with nav bar.
-- API client with Bearer token injection.
+- Initialized `frontend/` with Vite + React + TypeScript + Tailwind CSS v4.
+- `AuthProvider`, `useAuth` hook, GIS integration with dev bypass.
+- Sign-in page with Schnucks logo and Google button.
+- `Layout` component with Schnucks-branded nav bar.
+- API client with Bearer token injection and 401 refresh.
 - Vite proxy configuration for `/api`.
-- Verify end-to-end: sign in → `GET /api/users/me` returns the authenticated user.
 
-### Milestone 2: Dashboard and stats
+### Milestone 2: Dashboard and stats ✓
 
-- `Dashboard` page with user's gems (`GET /api/gems?owner=<email>`) and org stats (`GET /api/stats`).
-- `GemCard` component.
+- `Dashboard` page with user's gems (`listGems({ owner: email })`) and org stats (`getStats()`).
+- `GemTable` component for compact table display.
+- `StatCard` component for org-wide numbers.
 - Empty states when user has no gems.
 
-### Milestone 3: Import flow — extension path
+### Milestone 3: Registry browser ✓
 
-- `useExtension` hook (detect, `GET_GEMS`, `CLEAR_GEMS`).
-- Add `externally_connectable` to `extension/manifest.json` (version bump).
-- `Import` page with extension detection and gem preview.
-- `ImportPreview` component with select/deselect.
-- Import confirmation → `POST /api/gems/import` → result summary → `CLEAR_GEMS`.
+- `Registry` page with `SearchBar`, owner filter dropdown, results table.
+- `Pagination` component with record range display.
+- URL-synced search state (`/registry?q=...&owner=...&page=...`).
+- Page size of 50 for registry listings.
 
-### Milestone 4: Import flow — manual fallback
+### Milestone 4: Gem detail and actions ✓
 
-- `ManualImportForm` component (name + instructions fields).
-- Client-side validation.
-- Same `POST /api/gems/import` call, with `source: 'manual'`.
+- `GemDetail` page consuming `getGem(id)`.
+- Knowledge files display with Drive links and mime type icons.
+- Enabled tools display.
+- Copy instructions button with feedback.
+- Owner delete button with confirmation.
 
-### Milestone 5: Registry browser
+### Milestone 5: Production build integration ✓
 
-- `Registry` page with `SearchBar`, owner filter, results grid.
-- `Pagination` component.
-- URL-synced search state (`/registry?q=...&page=...`).
+- `express.static('public')` and SPA fallback route in `server/server.js`.
+- `make spa-install`, `make spa-dev`, and `make spa-build` Makefile targets.
+- Built SPA serves correctly from the Express server.
 
-### Milestone 6: Gem detail and actions
+### Milestone 6: Schnucks branding ✓
 
-- `GemDetail` page consuming `GET /api/gems/:id`.
-- Copy instructions button.
-- Owner delete button → `DELETE /api/gems/:id`.
-
-### Milestone 7: Production build integration
-
-- Update `server/Dockerfile` to include frontend build step (multi-stage build).
-- Add `express.static('public')` and SPA fallback route to `server/server.js`.
-- Add `make spa-dev` and `make spa-build` Makefile targets.
-- Verify the built SPA serves correctly from the Express server.
+- Schnucks logo in header and sign-in page.
+- Schnucks red color theme (`#E31837`) applied to nav links, focus rings, interactive elements.
+- "Schnucks Gem Registry" page title and header text.
 
 ### Deferred
 
@@ -451,6 +481,7 @@ The production build output (`frontend/` → `server/public/`) means deployment 
 - Gem instruction diff view (compare two similar gems side-by-side).
 - Admin features (status changes, user management) via UI — admin actions remain API-only.
 - Embedding-based semantic search or similarity visualization.
+- SPA-driven import flow (currently handled by the extension popup).
 
 ## 9. Success Criteria
 
@@ -458,51 +489,41 @@ The production build output (`frontend/` → `server/public/`) means deployment 
 
 1. A user can sign in with their corporate Google account and see their display name in the nav bar.
 2. Unauthenticated users cannot access any page except the sign-in page; all API calls include a valid Bearer token.
-3. With the Chrome extension installed and gems extracted, the Import page detects the extension, displays the gems in a preview list, and allows the user to import them.
-4. After a successful import, the extension's gem storage is cleared, and the imported gems appear on the Dashboard.
-5. A user without the extension can paste a gem's name and instructions into the manual import form and successfully import it.
-6. The Registry page displays all gems in the org with pagination, and searching by keyword returns relevant results.
-7. Clicking a gem card navigates to the gem detail page showing full instructions, owner, and metadata.
-8. The SPA can be built with `npm run build` (in `frontend/`) and served by the Express server from `server/public/`.
-9. During development, `npm run dev` (in `frontend/`) starts a dev server that proxies API calls to the Express backend.
+3. The Dashboard displays the authenticated user's gems in a compact table and org-wide statistics.
+4. The Registry page displays all gems with pagination (50 per page), and searching by keyword returns relevant results.
+5. The Registry search state is reflected in the URL and survives page refresh.
+6. Clicking a gem name in the table navigates to the gem detail page showing full instructions, knowledge files, tools, and owner metadata.
+7. The gem detail page has a working "Copy Instructions" button and a "Delete Gem" button visible to the owner.
+8. The SPA can be built with `make spa-build` and served by the Express server from `server/public/`.
+9. During development, `make spa-dev` starts a dev server that proxies API calls to the Express backend.
 
 ### Should pass
 
-10. The Import page shows an accurate summary after import (imported count, skipped count, duplicate count).
-11. The Dashboard displays org-wide statistics (total gems, unique gems, contributors).
-12. Search state in the registry is reflected in the URL and survives page refresh.
-13. The gem detail page has a working "Copy Instructions" button.
-14. The owner of a gem can delete it from the detail page.
-15. All API error responses (401, 403, 404, 500) are handled gracefully with user-facing messages.
+10. The Dashboard displays org-wide statistics (total gems, unique gems, contributors, duplicate clusters).
+11. The Registry owner filter dropdown is populated from the user list and correctly filters results.
+12. The gem detail page displays knowledge documents with Drive links and mime type icons.
+13. The gem detail page displays enabled tools as badges.
+14. All API error responses (401, 403, 404, 500) are handled gracefully with user-facing messages.
+15. The Schnucks logo and red color theme are consistently applied throughout the application.
 
-## 10. Open Questions
+## 10. Open Questions (Resolved)
 
 ### Q1: CSS approach
 
-Should the SPA use plain CSS/CSS modules, Tailwind CSS, or a component library (e.g., Radix, shadcn/ui)? Plain CSS is simplest but slower to build a polished UI. Tailwind is pragmatic for utility-first styling. A component library provides pre-built patterns but adds dependency weight.
-
-**Recommendation:** Start with CSS modules for simplicity. Add Tailwind if styling velocity becomes a bottleneck.
+**Resolved:** Tailwind CSS v4 with `@tailwindcss/vite` plugin. No separate configuration file — theme is defined inline in `index.css` via `@theme`. Schnucks brand colors declared as custom properties.
 
 ### Q2: Extension ID management
 
-The `VITE_EXTENSION_ID` needs to be known at build time. During development with sideloaded extensions, the ID changes each time the extension is reloaded. Options: (a) hardcode a known dev extension ID in `.env.development`, (b) allow the user to paste their extension ID into the SPA settings, (c) use `chrome.runtime.connect` with a fallback discovery mechanism.
-
-**Recommendation:** Use a `.env.development` file with the dev extension ID. Document how to find the ID in `chrome://extensions`. For production, the corporate Chrome Web Store assigns a stable ID.
+**Resolved:** `VITE_EXTENSION_ID` is set in `.env.development`. For sideloaded extensions, the developer copies the ID from `chrome://extensions`. The extension's `manifest.json` declares `externally_connectable` for `http://localhost:3000/*`.
 
 ### Q3: Token refresh strategy
 
-GIS ID tokens are short-lived (~1 hour). The SPA needs a strategy for refreshing them without interrupting the user. Options: (a) rely on GIS's built-in session management (automatic if One Tap / FedCM is active), (b) proactively refresh before expiry by decoding the token's `exp` claim, (c) reactively refresh on 401 from the API.
-
-**Recommendation:** Combine (b) and (c). Set a timer to refresh the token 5 minutes before expiry. If a 401 still occurs (e.g., clock skew), catch it in the API client and attempt one refresh before failing.
+**Resolved:** Combined proactive + reactive approach in `AuthProvider.tsx`. A timer refreshes the token 5 minutes before `exp`. If a 401 still occurs, the API client (`apiRequest` in `client.ts`) catches it, calls `refreshTokenFn`, and retries once.
 
 ### Q4: SPA hosting URL
 
-The production URL (e.g., `gem-factory.corp.example.com`) needs to be known for the extension's `externally_connectable` list and for the GIS OAuth redirect configuration. This needs to be decided before the extension manifest is updated and the OAuth client is configured.
-
-**Recommendation:** Decide the production domain early. Use `http://localhost:3000` for development in both the extension manifest and GIS config.
+**Resolved:** `http://localhost:3000` for development. The extension's `externally_connectable` includes this origin. Production domain TBD.
 
 ### Q5: Makefile integration
 
-How should the frontend dev workflow integrate with the existing Makefile? Options: (a) `make spa-dev` to start the Vite dev server, `make spa-build` to produce the production build, (b) developers use `npm run dev` directly in the `frontend/` directory.
-
-**Recommendation:** Add `make spa-dev` and `make spa-build` targets for consistency with the existing `make api-start` / `make api-stop` pattern. Developers can still use npm directly if they prefer.
+**Resolved:** `make spa-install`, `make spa-dev`, and `make spa-build` targets exist in the project Makefile, consistent with the `make api-start` / `make api-stop` pattern.

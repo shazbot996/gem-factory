@@ -16,6 +16,7 @@ function hash(text) {
 
 export async function importGems(pool, { userId, gemsPayload }) {
   let imported = 0;
+  let updated = 0;
   let skipped = 0;
   const importedIds = [];
 
@@ -26,25 +27,36 @@ export async function importGems(pool, { userId, gemsPayload }) {
     const row = await gems.insertGem(pool, {
       ownerId: userId,
       name: gem.name,
+      description: gem.description,
       instructions: normalizedInstructions,
       icon: gem.icon,
       source: gem.source || 'extension',
       instructionHash,
+      geminiId: gem.geminiId,
+      knowledgeFiles: gem.knowledgeFiles,
+      defaultTools: gem.defaultTools,
+      extractedAt: gem.extractedAt,
     });
 
     if (row) {
-      imported++;
-      importedIds.push(row.id);
+      if (row.inserted) {
+        imported++;
+        importedIds.push(row.id);
+      } else {
+        // ON CONFLICT DO UPDATE — gem existed, was refreshed
+        updated++;
+        importedIds.push(row.id);
+      }
     } else {
       skipped++;
     }
   }
 
-  if (imported > 0) {
+  if (imported > 0 || updated > 0) {
     await users.updateLastImport(pool, userId);
   }
 
-  return { imported, skipped, importedIds };
+  return { imported, updated, skipped, importedIds };
 }
 
 // Exported for testing

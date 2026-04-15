@@ -1,8 +1,18 @@
 import { apiRequest } from './client';
-import type { Gem, GemListResponse, ImportResult } from './types';
+import type { Gem, GemListResponse, ImportResult, KnowledgeFile } from './types';
 
 export async function importGems(
-  gems: { name: string; instructions: string; icon?: string; source?: string }[],
+  gems: {
+    name: string;
+    description?: string;
+    instructions: string;
+    icon?: string;
+    source?: string;
+    geminiId?: string | null;
+    knowledgeFiles?: KnowledgeFile[];
+    defaultTools?: string[];
+    extractedAt?: string | null;
+  }[],
 ): Promise<ImportResult> {
   return apiRequest('/api/gems/import', {
     method: 'POST',

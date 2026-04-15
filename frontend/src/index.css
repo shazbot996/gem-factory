@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+@theme {
+  --color-schnucks-red: #E31837;
+  --color-schnucks-red-dark: #C41430;
+  --color-schnucks-red-light: #FEF2F2;
+  --color-schnucks-red-50: #FEF2F2;
+  --color-schnucks-red-100: #FDE8E8;
+  --color-schnucks-red-700: #C41430;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}

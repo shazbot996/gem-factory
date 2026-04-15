@@ -3,7 +3,7 @@ import { useAuth } from '../auth/useAuth';
 import { listGems } from '../api/gems';
 import { getStats } from '../api/stats';
 import type { Gem, Stats } from '../api/types';
-import GemCard from '../components/GemCard';
+import GemTable from '../components/GemTable';
 import EmptyState from '../components/EmptyState';
 
 export default function Dashboard() {
@@ -17,7 +17,7 @@ export default function Dashboard() {
     async function load() {
       try {
         const [gemRes, statsRes] = await Promise.all([
-          listGems({ owner: user?.email }),
+          listGems({ owner: user?.email, limit: 200 }),
           getStats(),
         ]);
         setGems(gemRes.gems);
@@ -44,16 +44,12 @@ export default function Dashboard() {
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">My Gems</h2>
         {gems.length === 0 ? (
-          <EmptyState
-            message="You haven't imported any gems yet."
-            action={{ label: 'Import Gems', to: '/import' }}
-          />
+          <EmptyState message="You don't have any gems in the registry yet." />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {gems.map((gem) => (
-              <GemCard key={gem.id} gem={gem} />
-            ))}
-          </div>
+          <>
+            <p className="text-sm text-gray-500 mb-3">{gems.length} gem{gems.length !== 1 ? 's' : ''}</p>
+            <GemTable gems={gems} showOwner={false} />
+          </>
         )}
       </section>
 
@@ -76,7 +72,7 @@ export default function Dashboard() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white border rounded-lg p-4 text-center">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-sm text-gray-500">{label}</p>
     </div>

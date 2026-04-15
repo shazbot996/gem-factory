@@ -1,10 +1,29 @@
-export async function insertGem(pool, { ownerId, name, instructions, icon, source, instructionHash }) {
+export async function insertGem(pool, {
+  ownerId, name, description, instructions, icon, source,
+  instructionHash, geminiId, knowledgeFiles, defaultTools, extractedAt,
+}) {
   const { rows } = await pool.query(
-    `INSERT INTO gems (owner_id, name, instructions, icon, source, instruction_hash)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (owner_id, instruction_hash) DO NOTHING
-     RETURNING *`,
-    [ownerId, name, instructions, icon || null, source || 'extension', instructionHash]
+    `INSERT INTO gems (owner_id, name, description, instructions, icon, source,
+       instruction_hash, gemini_id, knowledge_files, default_tools, extracted_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     ON CONFLICT (owner_id, instruction_hash) DO UPDATE SET
+       name = EXCLUDED.name,
+       description = EXCLUDED.description,
+       icon = EXCLUDED.icon,
+       gemini_id = EXCLUDED.gemini_id,
+       knowledge_files = EXCLUDED.knowledge_files,
+       default_tools = EXCLUDED.default_tools,
+       extracted_at = EXCLUDED.extracted_at,
+       updated_at = now()
+     RETURNING *, (xmax = 0) AS inserted`,
+    [
+      ownerId, name, description || null, instructions,
+      icon || null, source || 'extension', instructionHash,
+      geminiId || null,
+      JSON.stringify(knowledgeFiles || []),
+      defaultTools || [],
+      extractedAt || null,
+    ]
   );
   return rows[0] || null;
 }
@@ -69,7 +88,7 @@ export async function list(pool, { q, owner, status, page = 1, limit = 20 }) {
 }
 
 export async function update(pool, id, fields) {
-  const allowed = ['name', 'icon', 'status'];
+  const allowed = ['name', 'description', 'icon', 'status'];
   const sets = [];
   const params = [id];
 

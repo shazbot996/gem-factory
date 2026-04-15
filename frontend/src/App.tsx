@@ -4,7 +4,6 @@ import { useAuth } from './auth/useAuth';
 import { GoogleSignIn } from './auth/GoogleSignIn';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import Import from './pages/Import';
 import Registry from './pages/Registry';
 import GemDetail from './pages/GemDetail';
 import NotFound from './pages/NotFound';
@@ -23,8 +22,9 @@ function ProtectedRoutes() {
 
 function SignInPage() {
   return (
-    <div className="flex flex-col items-center justify-center h-screen gap-6">
-      <h1 className="text-3xl font-bold">Gem Factory</h1>
+    <div className="flex flex-col items-center justify-center h-screen gap-6 bg-gray-50">
+      <img src="/schnucks-logo.png" alt="Schnucks" className="h-12" />
+      <h1 className="text-2xl font-bold text-gray-900">Gem Registry</h1>
       <p className="text-gray-600">
         Sign in with your corporate Google account
       </p>
@@ -39,7 +39,6 @@ export default function App() {
       <Routes>
         <Route element={<ProtectedRoutes />}>
           <Route index element={<Dashboard />} />
-          <Route path="import" element={<Import />} />
           <Route path="registry" element={<Registry />} />
           <Route path="gems/:id" element={<GemDetail />} />
         </Route>

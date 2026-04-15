@@ -3,12 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import { listGems } from '../api/gems';
 import { listUsers } from '../api/users';
 import type { Gem, UserListItem } from '../api/types';
-import GemCard from '../components/GemCard';
+import GemTable from '../components/GemTable';
 import SearchBar from '../components/SearchBar';
 import Pagination from '../components/Pagination';
 import EmptyState from '../components/EmptyState';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 export default function Registry() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -66,7 +66,12 @@ export default function Registry() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Gem Registry</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">Gem Registry</h1>
+        {!loading && (
+          <span className="text-sm text-gray-500">{total} gem{total !== 1 ? 's' : ''}</span>
+        )}
+      </div>
 
       <div className="flex gap-4">
         <div className="flex-1">
@@ -78,7 +83,7 @@ export default function Registry() {
         <select
           value={owner}
           onChange={(e) => updateParams({ owner: e.target.value, page: '' })}
-          className="border rounded-lg px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-schnucks-red focus:border-schnucks-red outline-none"
         >
           <option value="">All owners</option>
           {users.map((u) => (
@@ -101,11 +106,7 @@ export default function Registry() {
         <EmptyState message="No gems match your search." />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {gems.map((gem) => (
-              <GemCard key={gem.id} gem={gem} />
-            ))}
-          </div>
+          <GemTable gems={gems} />
           <Pagination
             page={page}
             limit={PAGE_SIZE}

@@ -161,6 +161,73 @@
     .btn-export:hover {
       background: #3367d6;
     }
+
+    .btn-save {
+      background: #0f9d58;
+      color: white;
+      flex: 1;
+    }
+
+    .btn-save:hover {
+      background: #0b8043;
+    }
+
+    .btn-save:disabled {
+      background: #a8dab5;
+      cursor: default;
+    }
+
+    .settings {
+      padding: 10px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      background: #f8f9fa;
+    }
+
+    .settings label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #5f6368;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .settings input {
+      width: 100%;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      padding: 5px 8px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    .settings input:focus {
+      border-color: #4285F4;
+    }
+
+    .settings-row {
+      margin-bottom: 6px;
+    }
+
+    .settings-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-msg {
+      font-size: 11px;
+      padding: 6px 16px;
+      text-align: center;
+    }
+
+    .status-msg.success {
+      background: #e6f4ea;
+      color: #137333;
+    }
+
+    .status-msg.error {
+      background: #fce8e6;
+      color: #c5221f;
+    }
   </style>
 </head>
 <body>
@@ -168,6 +235,17 @@
     <h1>Gem Factory</h1>
     <span class="count" id="count">0 gems</span>
   </div>
+  <div class="settings">
+    <div class="settings-row">
+      <label for="api-url">API Server URL</label>
+      <input type="text" id="api-url" placeholder="http://localhost:9090">
+    </div>
+    <div class="settings-row">
+      <label for="user-email">Your Email</label>
+      <input type="email" id="user-email" placeholder="you@example.com">
+    </div>
+  </div>
+  <div id="status"></div>
   <div id="content"></div>
   <script src="popup.js"></script>
 </body>

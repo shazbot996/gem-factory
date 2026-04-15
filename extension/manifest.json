@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Gem Factory Extractor",
-  "version": "0.9.7",
+  "version": "0.10.0",
   "description": "Extract Gemini gem configurations for the Gem Factory registry",
   "permissions": [
     "storage",
     "activeTab"
   ],
   "host_permissions": [
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "http://localhost:9090/*",
+    "https://*.run.app/*"
   ],
   "externally_connectable": {
     "matches": ["http://localhost:3000/*"]

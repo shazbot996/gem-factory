@@ -107,10 +107,24 @@ api-test: ## Run API server tests (requires running containers)
 api-logs: ## Tail API server logs
 	docker compose logs -f api
 
+spa-install: ## Install SPA frontend dependencies
+	cd frontend && npm install
+
 spa-dev: ## Start the SPA dev server (Ctrl-C to stop)
+	@if [ ! -d frontend/node_modules ]; then \
+	   echo "Running npm install first..."; \
+	   cd frontend && npm install; \
+	 fi
 	cd frontend && npm run dev
 
 spa-build: ## Build the SPA for production (output: server/public/)
+	@if [ ! -d frontend/node_modules ]; then \
+	   echo "Running npm install first..."; \
+	   cd frontend && npm install; \
+	 fi
 	cd frontend && npm run build
+	@echo ""
+	@echo "SPA built to server/public/"
+	@echo "Restart the API server (make api-start) to serve the new build."
 
-.PHONY: help voicecode db-init db-test api-start api-stop api-test api-logs spa-dev spa-build
+.PHONY: help voicecode db-init db-test api-start api-stop api-test api-logs spa-install spa-dev spa-build

@@ -4,16 +4,29 @@ export interface GemOwner {
   displayName: string;
 }
 
+export interface KnowledgeFile {
+  name: string;
+  type: string;
+  mimeType: string;
+  driveId: string | null;
+  driveUrl: string | null;
+}
+
 export interface Gem {
   id: string;
   name: string;
+  description: string | null;
   instructions: string;
   icon: string | null;
   source: string;
   status: string;
+  geminiId: string | null;
+  knowledgeFiles: KnowledgeFile[];
+  defaultTools: string[];
   owner: GemOwner;
   importedAt: string;
   updatedAt: string;
+  extractedAt: string | null;
   duplicateCluster: { id: string; gemCount: number } | null;
 }
 
@@ -24,6 +37,7 @@ export interface GemListResponse {
 
 export interface ImportResult {
   imported: number;
+  updated: number;
   skipped: number;
   importedIds: string[];
 }
@@ -57,7 +71,8 @@ export interface ExtractedGem {
   name: string;
   description: string;
   instructions: string;
-  knowledgeFiles: string[];
+  knowledgeFiles: KnowledgeFile[];
+  defaultTools: string[];
   extractedAt: string;
   source: string;
 }

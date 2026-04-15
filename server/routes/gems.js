@@ -99,6 +99,7 @@ router.patch('/:id', async (req, res) => {
 
     const fields = {};
     if (req.body.name !== undefined) fields.name = req.body.name;
+    if (req.body.description !== undefined) fields.description = req.body.description;
     if (req.body.icon !== undefined) fields.icon = req.body.icon;
 
     if (req.body.status !== undefined) {
@@ -142,13 +143,18 @@ function formatGem(row) {
   return {
     id: row.id,
     name: row.name,
+    description: row.description || null,
     instructions: row.instructions,
     icon: row.icon,
     source: row.source,
     status: row.status,
+    geminiId: row.gemini_id || null,
+    knowledgeFiles: row.knowledge_files || [],
+    defaultTools: row.default_tools || [],
     owner: row.owner,
     importedAt: row.imported_at,
     updatedAt: row.updated_at,
+    extractedAt: row.extracted_at || null,
     duplicateCluster: null, // Clustering deferred
   };
 }
