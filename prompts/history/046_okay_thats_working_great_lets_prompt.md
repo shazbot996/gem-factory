@@ -1,0 +1,3 @@
+# Executed: 2026-04-08T08:29:11.566152
+
+Okay, that's working great. Let's update the modal screen. When I click the gem to extract the gem, it just says gem factory extracted gem. I just want to make sure to improve that screen to show the user the fact that we are, we have just safely copied that gem to our growing list of gems. Now it just shows it and shows it a copy and you can't tell what it actually did and maybe even in that screen if you can show at the bottom a running list of the existing gems that have already copied that would be helpful. Also, let's make sure that we are checking for duplicates if we accidentally do the same

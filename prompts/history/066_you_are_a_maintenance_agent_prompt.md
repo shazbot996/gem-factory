@@ -1,3 +1,17 @@
+# Executed: 2026-04-15T09:37:31.639039
+
+You are a maintenance agent performing an **Update** action — regenerating a root project context file so it accurately reflects the current codebase.
+
+## Your task
+
+Rewrite the context file at `CLAUDE.md` so every fact matches the live code. This file is read by AI coding agents (Claude, Gemini) as their primary orientation to the project, so accuracy is critical.
+
+## Document to update
+
+- **Path:** `CLAUDE.md`
+- **Role:** Root project context file (read by AI agents via CLAUDE.md / GEMINI.md / AGENTS.md)
+
+<document>
 # Gem Factory — Claude Code Instructions
 
 ## What this project is
@@ -38,16 +52,13 @@ gem-factory/
         001_initial_schema.sql  ← users, gems, duplicate_clusters, duplicate_cluster_members
       gems.js               ← gem repository (CRUD + search queries)
       users.js              ← user repository (upsert, find, list with gem counts)
-    public/                 ← static assets (placeholder index.html)
     test/                   ← Node.js built-in test runner (node --test)
   extension/                ← Chrome extension (Manifest V3) — gem extractor
-    manifest.json           ← v0.9.7 — edit-page DOM extraction + silent Drive link capture
+    manifest.json           ← v0.8.1 — edit-page DOM extraction approach
     background.js           ← service worker: gem storage, message routing, SPA comms protocol
-    content-script.js       ← FAB + overlay on gem edit pages, reads DOM fields + captures Drive URLs
+    content-script.js       ← FAB + overlay on gem edit pages, reads DOM fields (name, instructions, knowledge, tools)
     page-script.js          ← MAIN world script (stub — reserved for future network interception)
-    popup.html              ← browser-action popup (extension toolbar icon)
-    popup.js                ← popup logic
-    styles.css              ← FAB, modal overlay, and knowledge list styles
+    styles.css              ← FAB and modal overlay styles
     icons/                  ← placeholder PNGs (blue diamond)
   voicecode-bbs/            ← separate project — VoiceCode BBS (Python curses app)
     CLAUDE.md               ← its own Claude Code instructions
@@ -60,7 +71,6 @@ gem-factory/
 - `docs/specs/chrome-extension-gem-extractor-SPEC.md` — detailed spec for the Chrome extension
 - `docs/specs/api-server-SPEC.md` — spec for the backend API server
 - `docs/specs/spa-frontend-SPEC.md` — spec for the frontend SPA (not yet built)
-- `docs/specs/authentication-authorization-SPEC.md` — auth spec covering extension, API, and SPA
 - `docs/plans/chrome-extension-gem-extractor-PLAN.md` — implementation plan for the extension (partially executed)
 - `docs/plans/api-server-PLAN.md` — implementation plan for the API server (executed)
 - `docs/plans/spa-frontend-PLAN.md` — implementation plan for the SPA (not yet started)
@@ -110,30 +120,20 @@ gem-factory/
 
 ## Chrome extension (`extension/`)
 
-**Current approach (v0.9.7):** Extract one gem at a time from the gem **edit** page, with silent Drive link capture for knowledge documents.
+**Current approach (v0.8.1):** Extract one gem at a time from the gem **edit** page.
 
-**What it extracts (all from DOM — no API calls):**
-- **Gem name** — from the first `<input>` field on the edit page
-- **Description** — from `#gem-description-input` textarea
-- **Instructions** — full text from the `.ql-editor` (Quill rich-text editor)
-- **Knowledge files** — file names, types, and mime types from `uploader-file-preview` elements inside `.knowledge-container`; mime type parsed from the Drive icon image URL
-- **Knowledge file Drive URLs** — captured silently by programmatically opening the Google Drive viewer (hidden via inline styles), reading `#drive-active-item-info` JSON (`{id, title, mimeType}`), then closing the viewer via Escape key dispatch; produces `driveId` and canonical `driveUrl` (e.g. `https://docs.google.com/spreadsheets/d/{id}`)
-- **Enabled tools** — from `bots-creation-default-tool-section` dropdown label
+- The FAB (floating action button) only appears on `/gems/edit/*` URLs
+- Clicking the FAB reads the gem name from input fields, full instructions from the `.ql-editor` (Quill rich-text editor), knowledge file names from the "Knowledge" section, and enabled tools (Google Search, Python, etc.) from the "Tools" section directly in the DOM
+- No API calls are made — all data comes from the rendered edit form
+- The overlay shows the extracted gem as JSON with a "Copy to Clipboard" button
+- Extracted gems accumulate in `chrome.storage.local` (keyed by gem ID, last extraction wins)
 
-**Overlay UI** (shown after clicking the FAB):
-- Success/update confirmation banner
-- Instructions preview (first 300 chars)
-- Knowledge documents list with "Capture All Links" button — silently captures Drive URLs for all files sequentially, showing per-item status (hourglass → checkmark/X); previously captured links are preserved across overlay reopens
-- Running gem collection list (all extracted gems, newest first)
-- "Copy JSON" footer button (includes `driveId`/`driveUrl` when captured)
-
-**Why this approach:** The Gemini internal `batchexecute` list API (`CNgdBe` RPC) truncates instructions at ~100 chars. The edit page is the only place the full instructions are reliably available in the browser. Knowledge file Drive IDs only appear when the Drive viewer opens — they are not present in the edit page DOM otherwise.
+**Why this approach:** The Gemini internal `batchexecute` list API (`CNgdBe` RPC) truncates instructions at ~100 chars. The edit page is the only place the full instructions are reliably available in the browser.
 
 **To test the extension:**
 1. Go to `chrome://extensions`, enable Developer mode, click "Load unpacked", select `extension/`
 2. Navigate to `gemini.google.com`, open a gem for editing
 3. The blue FAB appears bottom-right — click to extract
-4. In the overlay, click "Capture All Links" to silently grab Drive URLs for knowledge files
 
 **Key conventions:**
 - No build step, no npm, no bundler — pure browser APIs only
@@ -141,12 +141,9 @@ gem-factory/
 - Version in `manifest.json` should be bumped on each testable change
 - `page-script.js` runs in the `MAIN` world (for future network interception); `content-script.js` runs in the isolated world
 - XSS prevention: use `textContent`, never `innerHTML`, for user-supplied data
-- Drive viewer close uses Escape key dispatch + close button click — never force-remove the viewer DOM (corrupts Angular's component state and breaks subsequent viewer opens)
 
-**Background script messages (`background.js`):**
-- Internal (from content script): `STORE_GEM`, `GET_ALL_GEMS`, `DELETE_GEM`
-- External (from SPA via `chrome.runtime.onMessageExternal`): `GET_GEMS`, `CLEAR_GEMS`
-- `externally_connectable` is configured in the manifest for `http://localhost:3000/*`
+**SPA communication protocol (in `background.js`):**
+The background script handles `GET_GEMS` and `CLEAR_GEMS` external messages via `chrome.runtime.onMessageExternal` per `ARCH.md` section 7.2. The manifest currently lacks `externally_connectable` — this must be added before the SPA can communicate with the extension.
 
 ## Database
 
@@ -194,3 +191,38 @@ A separate Python curses application that lives in this repo. It has its own `CL
 - The Chrome extension exists and is functional (`extension/`)
 - Docs follow a type/frontmatter convention: `type: arch|spec|plan|drift-report`
 - Plans go in `docs/plans/`, specs in `docs/specs/`, architecture in `docs/context/`
+</document>
+
+## Instructions
+
+1. **Read the actual code.** Use your tools to explore files, grep for patterns, and read implementations. Do not rely solely on the embedded content — verify every claim against the live codebase.
+
+2. **Use git history for context.** Run `git log --oneline -30` and `git diff HEAD~10..HEAD --stat` to understand recent changes. This helps you identify what's new, what's been renamed, and what's been removed.
+
+3. **Preserve structure and voice.** Keep the same section headings, organizational hierarchy, and writing style. The document should feel like a natural update, not a rewrite from scratch.
+
+4. **Update all facts:**
+   - File paths and directory structure
+   - Module, class, and function names
+   - Architecture descriptions and data flows
+   - Configuration values and environment variables
+   - Dependencies and integration points
+   - UI descriptions and keyboard shortcuts
+
+5. **Add missing coverage.** If new modules, features, or subsystems have been added since the last update and they fall within this document's scope, add them in the appropriate section following the existing style.
+
+6. **Remove obsolete content.** If the document describes code or features that no longer exist, remove those references cleanly. Don't annotate removals — just take them out.
+
+7. **Cross-reference sibling context files.** If this is AGENTS.md, ensure references to CLAUDE.md and GEMINI.md are accurate. If this is CLAUDE.md or GEMINI.md, ensure it complements (not duplicates) AGENTS.md.
+
+## Output
+
+Overwrite the file at `CLAUDE.md` with the updated content. Do not create a new file — write directly to the existing path. Git provides rollback if needed.
+
+## Guidelines
+
+- **Accuracy over completeness.** It's better to omit something than to include a wrong claim. AI agents will trust this file.
+- **Be specific.** Reference actual file paths, class names, and module structure — vague descriptions are unhelpful for agents navigating the codebase.
+- **Keep it maintainable.** Write at the right level of abstraction. Don't list every function — describe the architecture and key entry points.
+- **Minimize churn.** Don't rewrite sections that are already accurate. Only change what needs changing so the git diff stays reviewable.
+

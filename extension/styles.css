@@ -324,3 +324,136 @@
   margin-left: 12px;
   flex-shrink: 0;
 }
+
+/* ---------- Knowledge Documents List (Overlay) ---------- */
+
+#gem-factory-overlay .gf-knowledge-list {
+  list-style: none;
+  margin: 0 0 16px 0;
+  padding: 0;
+  border: 1px solid #e8eaed;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#gem-factory-overlay .gf-knowledge-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f3f4;
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  transition: background 0.1s ease;
+}
+
+#gem-factory-overlay .gf-knowledge-item:last-child {
+  border-bottom: none;
+}
+
+#gem-factory-overlay .gf-knowledge-item:hover {
+  background: #f8f9fa;
+}
+
+#gem-factory-overlay .gf-knowledge-icon {
+  font-size: 18px;
+  width: 28px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+#gem-factory-overlay .gf-knowledge-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#gem-factory-overlay .gf-knowledge-name {
+  color: #202124;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#gem-factory-overlay .gf-knowledge-type {
+  color: #9aa0a6;
+  font-size: 11px;
+}
+
+#gem-factory-overlay .gf-knowledge-open {
+  flex-shrink: 0;
+  margin-left: 12px;
+  background: #4285F4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+#gem-factory-overlay .gf-knowledge-open:hover {
+  background: #3367d6;
+}
+
+#gem-factory-overlay .gf-knowledge-open:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+#gem-factory-overlay .gf-knowledge-open.gf-knowledge-captured {
+  background: #0f9d58;
+}
+
+#gem-factory-overlay .gf-knowledge-open.gf-knowledge-captured:hover {
+  background: #0b8043;
+}
+
+/* Header row with label + capture-all button */
+#gem-factory-overlay .gf-knowledge-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+#gem-factory-overlay .gf-knowledge-header .gf-section-label {
+  margin-bottom: 0;
+}
+
+/* Captured Drive link shown inline */
+#gem-factory-overlay .gf-knowledge-link {
+  font-size: 11px;
+  color: #1a73e8;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+#gem-factory-overlay .gf-knowledge-link:hover {
+  text-decoration: underline;
+}
+
+/* Status indicator per knowledge item */
+#gem-factory-overlay .gf-knowledge-status {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+#gem-factory-overlay .gf-status-ok {
+  color: #0f9d58;
+}
+
+#gem-factory-overlay .gf-status-fail {
+  color: #d93025;
+}

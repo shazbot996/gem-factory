@@ -35,41 +35,46 @@
 
   /**
    * Look for knowledge files uploaded to the gem.
+   * Extracts name, type label, and mime type (from the icon URL).
+   * Each file preview chip is clickable in the native UI — we record the
+   * DOM element reference so the overlay can programmatically click it.
    */
   function extractKnowledgeFiles() {
     var files = [];
-    var headings = document.querySelectorAll('h1, h2, h3, [role="heading"], .section-title');
-    
-    for (var i = 0; i < headings.length; i++) {
-      var hText = headings[i].textContent.trim().toLowerCase();
-      if (hText === 'knowledge' || hText.includes('your files')) {
-        // Look in the parent container for anything that looks like a filename
-        var container = headings[i].closest('section') || headings[i].parentElement;
-        if (container) {
-          // Look for text nodes or aria-labels that match file patterns
-          var allElems = container.querySelectorAll('*');
-          allElems.forEach(function(el) {
-            var text = (el.textContent || '').trim();
-            var label = el.getAttribute('aria-label') || '';
-            var title = el.getAttribute('title') || '';
-            
-            [text, label, title].forEach(function(str) {
-              if (!str) return;
-              // Very loose match for filenames: something.ext
-              var matches = str.match(/[a-zA-Z0-9._-]+\.[a-zA-Z0-9]{2,5}/g);
-              if (matches) {
-                matches.forEach(function(m) {
-                  // Filter out common UI strings that aren't files
-                  if (m.includes('..') || m.length < 5 || m.length > 100) return;
-                  if (!files.includes(m)) files.push(m);
-                });
-              }
-            });
+    // The Gemini edit page renders knowledge files inside a .knowledge-container
+    // with <uploader-file-preview> elements for each file.
+    var container = document.querySelector('.knowledge-container');
+    if (!container) return files;
+
+    var previews = container.querySelectorAll('uploader-file-preview');
+    previews.forEach(function (preview) {
+      var nameEl = preview.querySelector('[data-test-id="file-name"]');
+      var typeEl = preview.querySelector('.file-type');
+      if (nameEl) {
+        var name = nameEl.textContent.trim();
+        if (name) {
+          // Parse mime type from the Drive icon URL if available
+          var mimeType = '';
+          var iconImg = preview.querySelector('[data-test-id="file-icon-img"]');
+          if (iconImg && iconImg.src) {
+            var mimeMatch = iconImg.src.match(/\/type\/(.+)$/);
+            if (mimeMatch) mimeType = decodeURIComponent(mimeMatch[1]);
+          }
+
+          // The clickable file-preview div that opens the Drive viewer
+          var clickTarget = preview.querySelector('[data-test-id="file-preview"]');
+
+          files.push({
+            name: name,
+            type: typeEl ? typeEl.textContent.trim() : '',
+            mimeType: mimeType,
+            _clickTarget: clickTarget || preview,
+            _previewEl: preview
           });
         }
-        break;
       }
-    }
+    });
+
     return files;
   }
 
@@ -78,61 +83,44 @@
    */
   function extractEnabledTools() {
     var tools = [];
-    // Tool keywords to search for
-    var toolSpecs = [
-      { name: 'Google Search', keywords: ['search', 'google search', 'web search'] },
-      { name: 'Python', keywords: ['python', 'code execution', 'analysis'] },
-      { name: 'Image generation', keywords: ['image', 'generate image', 'create image', 'dall-e'] },
-      { name: 'YouTube', keywords: ['youtube'] },
-      { name: 'Maps', keywords: ['maps', 'google maps'] }
-    ];
-    
-    // 1. Try finding by roles
-    var switches = document.querySelectorAll('[role="switch"], [role="checkbox"], button, .mat-slide-toggle, .mat-checkbox');
-    switches.forEach(function(el) {
-      var isEnabled = el.getAttribute('aria-checked') === 'true' || 
-                      el.getAttribute('aria-pressed') === 'true' ||
-                      el.classList.contains('checked') ||
-                      el.classList.contains('mat-checked') ||
-                      el.classList.contains('is-checked');
-      
-      if (isEnabled) {
-        var contextText = (el.getAttribute('aria-label') || el.textContent || el.parentElement.textContent || '').toLowerCase();
-        
-        toolSpecs.forEach(function(spec) {
-          spec.keywords.forEach(function(kw) {
-            if (contextText.includes(kw) && !tools.includes(spec.name)) {
-              tools.push(spec.name);
-            }
-          });
-        });
+    // The Gemini edit page has a <bots-creation-default-tool-section> element
+    // containing a dropdown button (.default-tool-trigger) whose label span
+    // holds the currently selected tool name.
+    var section = document.querySelector('bots-creation-default-tool-section');
+    if (section) {
+      var trigger = section.querySelector('.default-tool-trigger .logo-pill-label-container span');
+      if (trigger) {
+        var text = trigger.textContent.trim();
+        if (text) tools.push(text);
       }
-    });
-
-    // 2. Fallback: Search for tool labels and find nearest toggles
-    if (tools.length === 0) {
-      toolSpecs.forEach(function(spec) {
-        var labels = document.querySelectorAll('*');
-        for (var i = 0; i < labels.length; i++) {
-          var labelText = labels[i].textContent.toLowerCase();
-          var found = false;
-          spec.keywords.forEach(function(kw) {
-            if (labelText === kw || (labelText.includes(kw) && labelText.length < 30)) {
-              // Found a potential label, look for a switch in its vicinity
-              var area = labels[i].closest('div') || labels[i].parentElement;
-              var toggle = area ? area.querySelector('[aria-checked="true"], [aria-pressed="true"], .checked, .mat-checked') : null;
-              if (toggle) {
-                if (!tools.includes(spec.name)) tools.push(spec.name);
-                found = true;
-              }
-            }
-          });
-          if (found) break;
-        }
-      });
     }
 
     return tools;
+  }
+
+  /** Map mime types to short emoji icons for the overlay list */
+  function getMimeIcon(mimeType) {
+    if (!mimeType) return '\uD83D\uDCC4'; // 📄
+    if (mimeType.indexOf('spreadsheet') !== -1) return '\uD83D\uDCCA'; // 📊
+    if (mimeType.indexOf('document') !== -1) return '\uD83D\uDCC4'; // 📄
+    if (mimeType.indexOf('presentation') !== -1) return '\uD83D\uDCCA'; // 📊
+    if (mimeType.indexOf('pdf') !== -1) return '\uD83D\uDCC4'; // 📄
+    if (mimeType.indexOf('image') !== -1) return '\uD83D\uDDBC'; // 🖼
+    if (mimeType.indexOf('text') !== -1) return '\uD83D\uDCDD'; // 📝
+    return '\uD83D\uDCC1'; // 📁
+  }
+
+  /** Human-friendly mime type label */
+  function friendlyMimeType(mimeType) {
+    if (!mimeType) return '';
+    if (mimeType.indexOf('spreadsheet') !== -1) return 'Google Sheets';
+    if (mimeType.indexOf('document') !== -1) return 'Google Docs';
+    if (mimeType.indexOf('presentation') !== -1) return 'Google Slides';
+    if (mimeType.indexOf('pdf') !== -1) return 'PDF';
+    if (mimeType.indexOf('image') !== -1) return 'Image';
+    if (mimeType.indexOf('text/plain') !== -1) return 'Text file';
+    if (mimeType.indexOf('text/csv') !== -1) return 'CSV';
+    return mimeType.split('/').pop().replace('vnd.google-apps.', '');
   }
 
   /**
@@ -189,17 +177,32 @@
       return { error: 'Could not find gem instructions on this page. The page may still be loading — wait a moment and try again.' };
     }
 
+    // Extract description from the dedicated textarea
+    var description = '';
+    var descInput = document.getElementById('gem-description-input');
+    if (descInput) {
+      description = descInput.value.trim();
+    }
+
+    var knowledgeRaw = extractKnowledgeFiles();
+
+    // Separate DOM refs (for overlay interaction) from serializable data
+    var knowledgeForStorage = knowledgeRaw.map(function (f) {
+      return { name: f.name, type: f.type, mimeType: f.mimeType };
+    });
+
     return {
       gems: [{
         id: gemId,
         name: name || '(unnamed)',
-        description: '',
+        description: description,
         instructions: instructions,
-        knowledgeFiles: extractKnowledgeFiles(),
+        knowledgeFiles: knowledgeForStorage,
         defaultTools: extractEnabledTools(),
         extractedAt: new Date().toISOString(),
         source: 'edit_page'
-      }]
+      }],
+      _knowledgeDom: knowledgeRaw
     };
   }
 
@@ -256,21 +259,52 @@
         }
 
         var gem = result.gems[0];
+        var knowledgeDom = result._knowledgeDom || [];
 
-        // Store locally — callback tells us if new or updated, plus the full list
-        chrome.runtime.sendMessage({ type: 'STORE_GEM', gem: gem }, function (resp) {
-          if (resp && resp.success) {
-            setFabState('success');
-            showOverlay({
-              gem: gem,
-              wasUpdate: resp.wasUpdate,
-              totalGems: resp.totalGems,
-              allGems: resp.allGems
-            });
-          } else {
-            setFabState('error');
-            showOverlay({ error: 'Failed to save gem locally.' });
+        // Before storing, merge in any previously captured driveId/driveUrl
+        // so re-opening the overlay doesn't wipe out earlier link captures.
+        chrome.runtime.sendMessage({ type: 'GET_ALL_GEMS' }, function (stored) {
+          if (stored && stored.gems) {
+            for (var s = 0; s < stored.gems.length; s++) {
+              if (stored.gems[s].id === gem.id) {
+                var oldKFiles = stored.gems[s].knowledgeFiles || [];
+                for (var n = 0; n < gem.knowledgeFiles.length; n++) {
+                  for (var o = 0; o < oldKFiles.length; o++) {
+                    if (oldKFiles[o].name === gem.knowledgeFiles[n].name && oldKFiles[o].driveId) {
+                      gem.knowledgeFiles[n].driveId = oldKFiles[o].driveId;
+                      gem.knowledgeFiles[n].driveUrl = oldKFiles[o].driveUrl;
+                      // Also populate the knowledgeDom entry so the overlay shows it
+                      for (var d = 0; d < knowledgeDom.length; d++) {
+                        if (knowledgeDom[d].name === gem.knowledgeFiles[n].name) {
+                          knowledgeDom[d].driveId = oldKFiles[o].driveId;
+                          knowledgeDom[d].driveUrl = oldKFiles[o].driveUrl;
+                        }
+                      }
+                      break;
+                    }
+                  }
+                }
+                break;
+              }
+            }
           }
+
+          // Now store with merged data
+          chrome.runtime.sendMessage({ type: 'STORE_GEM', gem: gem }, function (resp) {
+            if (resp && resp.success) {
+              setFabState('success');
+              showOverlay({
+                gem: gem,
+                wasUpdate: resp.wasUpdate,
+                totalGems: resp.totalGems,
+                allGems: resp.allGems,
+                knowledgeDom: knowledgeDom
+              });
+            } else {
+              setFabState('error');
+              showOverlay({ error: 'Failed to save gem locally.' });
+            }
+          });
         });
       } catch (err) {
         setFabState('error');
@@ -281,8 +315,10 @@
 
   // ---------- Overlay ----------
 
+  var capturingLinks = false;
+
   function handleEscapeKey(e) {
-    if (e.key === 'Escape') removeOverlay();
+    if (e.key === 'Escape' && !capturingLinks) removeOverlay();
   }
 
   function removeOverlay() {
@@ -366,6 +402,126 @@
         body.appendChild(preview);
       }
 
+      // Knowledge files section
+      var kFiles = result.knowledgeDom || [];
+      if (kFiles.length > 0) {
+        var kLabelRow = document.createElement('div');
+        kLabelRow.className = 'gf-knowledge-header';
+
+        var kLabel = document.createElement('div');
+        kLabel.className = 'gf-section-label';
+        kLabel.textContent = 'Knowledge documents (' + kFiles.length + ')';
+        kLabelRow.appendChild(kLabel);
+
+        var captureAllBtn = document.createElement('button');
+        captureAllBtn.className = 'gf-knowledge-open';
+        captureAllBtn.textContent = 'Capture All Links';
+        captureAllBtn.title = 'Silently captures the Google Drive URL for each document';
+        kLabelRow.appendChild(captureAllBtn);
+
+        body.appendChild(kLabelRow);
+
+        var kList = document.createElement('ul');
+        kList.className = 'gf-knowledge-list';
+
+        // Build the list items and keep references for updating status
+        var kItemEls = [];
+        for (var k = 0; k < kFiles.length; k++) {
+          (function (kf, idx) {
+            var kItem = document.createElement('li');
+            kItem.className = 'gf-knowledge-item';
+
+            var kIcon = document.createElement('span');
+            kIcon.className = 'gf-knowledge-icon';
+            kIcon.textContent = getMimeIcon(kf.mimeType);
+            kItem.appendChild(kIcon);
+
+            var kInfo = document.createElement('div');
+            kInfo.className = 'gf-knowledge-info';
+
+            var kName = document.createElement('span');
+            kName.className = 'gf-knowledge-name';
+            kName.textContent = kf.name;
+            kInfo.appendChild(kName);
+
+            var kMeta = document.createElement('span');
+            kMeta.className = 'gf-knowledge-type';
+            kMeta.textContent = kf.mimeType ? friendlyMimeType(kf.mimeType) : '';
+            kInfo.appendChild(kMeta);
+
+            var kLink = document.createElement('a');
+            kLink.className = 'gf-knowledge-link';
+            kLink.target = '_blank';
+            kLink.rel = 'noopener';
+            // Show previously captured link if available
+            if (kf.driveUrl) {
+              kLink.href = kf.driveUrl;
+              kLink.textContent = kf.driveUrl;
+              kLink.style.display = '';
+            } else {
+              kLink.style.display = 'none';
+            }
+            kInfo.appendChild(kLink);
+
+            kItem.appendChild(kInfo);
+
+            var kStatus = document.createElement('span');
+            kStatus.className = 'gf-knowledge-status';
+            // Show existing capture status
+            if (kf.driveId) {
+              kStatus.textContent = '\u2714';
+              kStatus.title = 'Previously captured';
+              kStatus.className = 'gf-knowledge-status gf-status-ok';
+            }
+            kItem.appendChild(kStatus);
+
+            kItemEls.push({ item: kItem, meta: kMeta, link: kLink, status: kStatus });
+            kList.appendChild(kItem);
+          })(kFiles[k], k);
+        }
+
+        body.appendChild(kList);
+
+        // Wire up the "Capture All Links" button
+        captureAllBtn.addEventListener('click', function () {
+          captureAllBtn.disabled = true;
+          captureAllBtn.textContent = 'Capturing\u2026';
+          capturingLinks = true;
+
+          // Mark all items as pending
+          for (var p = 0; p < kItemEls.length; p++) {
+            kItemEls[p].status.textContent = '\u23F3'; // ⏳
+            kItemEls[p].status.title = 'Waiting\u2026';
+          }
+
+          captureAllDriveLinks(kFiles, result.gem.id,
+            function onProgress(idx, driveInfo) {
+              var el = kItemEls[idx];
+              if (driveInfo) {
+                el.status.textContent = '\u2714';
+                el.status.title = 'Captured';
+                el.status.className = 'gf-knowledge-status gf-status-ok';
+                el.link.href = driveInfo.driveUrl;
+                el.link.textContent = driveInfo.driveUrl;
+                el.link.style.display = '';
+                el.meta.textContent = friendlyMimeType(kFiles[idx].mimeType);
+              } else {
+                el.status.textContent = '\u2716';
+                el.status.title = 'Could not capture link';
+                el.status.className = 'gf-knowledge-status gf-status-fail';
+              }
+            },
+            function onDone() {
+              capturingLinks = false;
+              captureAllBtn.textContent = '\u2714 All Captured';
+              captureAllBtn.className = 'gf-knowledge-open gf-knowledge-captured';
+              captureAllBtn.disabled = false;
+              captureAllBtn.title = 'All links captured! Click to re-capture.';
+            }
+          );
+        });
+      }
+
       // Running list of all gems
       if (result.allGems && result.allGems.length > 0) {
         var listLabel = document.createElement('div');
@@ -421,12 +577,29 @@
       copyBtn.textContent = 'Copy JSON';
       copyBtn.addEventListener('click', async function () {
         try {
-          var payload = { 
-            name: result.gem.name, 
-            instructions: result.gem.instructions, 
-            knowledgeFiles: result.gem.knowledgeFiles || [],
+          // Merge any captured Drive links from knowledgeDom back into the output
+          var kFilesOut = (result.gem.knowledgeFiles || []).map(function (f) {
+            var copy = { name: f.name, type: f.type, mimeType: f.mimeType };
+            if (f.driveId) copy.driveId = f.driveId;
+            if (f.driveUrl) copy.driveUrl = f.driveUrl;
+            // Also check knowledgeDom for links captured this session
+            var kDom = result.knowledgeDom || [];
+            for (var d = 0; d < kDom.length; d++) {
+              if (kDom[d].name === f.name && kDom[d].driveId) {
+                copy.driveId = kDom[d].driveId;
+                copy.driveUrl = kDom[d].driveUrl;
+                break;
+              }
+            }
+            return copy;
+          });
+          var payload = {
+            name: result.gem.name,
+            description: result.gem.description || '',
+            instructions: result.gem.instructions,
+            knowledgeFiles: kFilesOut,
             defaultTools: result.gem.defaultTools || [],
-            source: result.gem.source || 'edit_page' 
+            source: result.gem.source || 'edit_page'
           };
           await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
           copyBtn.textContent = 'Copied!';
@@ -457,6 +630,263 @@
     document.addEventListener('keydown', handleEscapeKey);
     document.body.style.overflow = 'hidden';
     document.body.appendChild(overlay);
+  }
+
+  // ---------- Drive Viewer Link Capture ----------
+
+  /**
+   * Build a canonical Google Drive URL from a file ID and mime type.
+   */
+  function buildDriveUrl(fileId, mimeType) {
+    if (!fileId) return '';
+    if (mimeType && mimeType.indexOf('spreadsheet') !== -1) {
+      return 'https://docs.google.com/spreadsheets/d/' + fileId;
+    }
+    if (mimeType && mimeType.indexOf('document') !== -1) {
+      return 'https://docs.google.com/document/d/' + fileId;
+    }
+    if (mimeType && mimeType.indexOf('presentation') !== -1) {
+      return 'https://docs.google.com/presentation/d/' + fileId;
+    }
+    return 'https://drive.google.com/file/d/' + fileId;
+  }
+
+  /**
+   * Hide the Drive viewer visually using only opacity and z-index.
+   * NEVER set pointer-events:none — that prevents the close button
+   * from working through Closure Library's event system.
+   */
+  function hideDriveViewer() {
+    var viewer = document.querySelector('div.drive-viewer.drive-viewer-overlay');
+    if (viewer) {
+      viewer.style.setProperty('opacity', '0', 'important');
+      viewer.style.setProperty('z-index', '-1', 'important');
+    }
+  }
+
+  /**
+   * Remove our inline hide overrides from the viewer so Angular sees
+   * it as "normal" when we ask it to close.
+   */
+  function unhideDriveViewer() {
+    var viewer = document.querySelector('div.drive-viewer.drive-viewer-overlay');
+    if (viewer) {
+      viewer.style.removeProperty('opacity');
+      viewer.style.removeProperty('z-index');
+    }
+  }
+
+  /**
+   * Ask the Drive viewer to close via Escape key dispatch.
+   * The viewer declares aria-keyshortcuts="Escape" and listens for it.
+   * We dispatch on the viewer element itself, and also try the close button.
+   */
+  function requestDriveViewerClose() {
+    var viewer = document.querySelector('div.drive-viewer.drive-viewer-overlay');
+
+    // First: restore styles so Angular sees the viewer as "normal"
+    unhideDriveViewer();
+
+    // Re-hide immediately with opacity so user doesn't see a flash
+    // (z-index stays restored so events work normally)
+    if (viewer) {
+      viewer.style.setProperty('opacity', '0', 'important');
+    }
+
+    // Strategy 1: Dispatch Escape key on the viewer
+    if (viewer) {
+      viewer.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true
+      }));
+    }
+
+    // Strategy 2: Also click the close button
+    var closeBtn = document.querySelector('.drive-viewer-close-button[aria-label="Close"]');
+    if (closeBtn) closeBtn.click();
+
+    // Strategy 3: Dispatch Escape on the viewer's parent as fallback
+    // (avoid document-level dispatch so our own overlay Escape handler
+    // doesn't accidentally fire)
+    if (viewer && viewer.parentNode) {
+      viewer.parentNode.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', code: 'Escape', keyCode: 27, bubbles: false
+      }));
+    }
+  }
+
+  /**
+   * Wait until the Drive viewer is fully gone from the DOM, then call onClean.
+   * NEVER force-removes DOM — Angular must manage its own lifecycle or
+   * subsequent viewer opens will fail.
+   */
+  function waitForViewerGone(onClean) {
+    var cleanAttempts = 0;
+    var maxCleanAttempts = 40; // 40 × 100ms = 4 seconds
+    var retried = false;
+    var cleanTimer = setInterval(function () {
+      cleanAttempts++;
+      var viewer = document.querySelector('div.drive-viewer.drive-viewer-overlay');
+
+      if (!viewer) {
+        clearInterval(cleanTimer);
+        onClean();
+        return;
+      }
+
+      // At the halfway point, try closing again in case the first attempt
+      // was swallowed (e.g. by a focus issue)
+      if (cleanAttempts === 20 && !retried) {
+        retried = true;
+        requestDriveViewerClose();
+      }
+
+      if (cleanAttempts >= maxCleanAttempts) {
+        // Give up waiting — viewer didn't close. DON'T force-remove.
+        // Signal done anyway so the sequence can continue; this file
+        // was already captured, it's only the close that's stuck.
+        clearInterval(cleanTimer);
+        // Last resort: hide it and move on. Angular state is intact.
+        hideDriveViewer();
+        onClean();
+      }
+    }, 100);
+  }
+
+  /**
+   * Silently capture a Drive file's ID by briefly opening the Drive viewer
+   * invisibly, reading #drive-active-item-info, then closing it.
+   *
+   * CRITICAL: We never force-remove the viewer DOM. Angular must close it
+   * naturally via Escape/close-button, or subsequent opens will break.
+   *
+   * @param {Element} clickTarget  - the native file-preview element to click
+   * @param {function} onCapture   - called with { driveId, driveUrl, title, mimeType } or null
+   */
+  function silentCaptureDriveLink(clickTarget, onCapture) {
+    // 1. Click the chip to trigger the viewer
+    clickTarget.click();
+
+    // 2. Poll — hide viewer on sight, then wait for file info
+    var attempts = 0;
+    var maxAttempts = 80; // 80 × 75ms = 6 seconds max
+    var viewerHidden = false;
+    var pollTimer = setInterval(function () {
+      attempts++;
+
+      // Hide the viewer as soon as it appears
+      if (!viewerHidden) {
+        var viewer = document.querySelector('div.drive-viewer.drive-viewer-overlay');
+        if (viewer) {
+          hideDriveViewer();
+          viewerHidden = true;
+        }
+      }
+
+      // Check for the file info element
+      var infoEl = document.getElementById('drive-active-item-info');
+      if (infoEl) {
+        clearInterval(pollTimer);
+        var result = null;
+        try {
+          var info = JSON.parse(infoEl.textContent);
+          if (info && info.id) {
+            result = {
+              driveId: info.id,
+              driveUrl: buildDriveUrl(info.id, info.mimeType),
+              title: info.title || '',
+              mimeType: info.mimeType || ''
+            };
+          }
+        } catch (e) {
+          // JSON parse failed
+        }
+
+        // Ask Angular to close, wait for it, then signal done
+        requestDriveViewerClose();
+        waitForViewerGone(function () {
+          onCapture(result);
+        });
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(pollTimer);
+        // Timed out — still try to close whatever's there
+        requestDriveViewerClose();
+        waitForViewerGone(function () {
+          onCapture(null);
+        });
+      }
+    }, 75);
+  }
+
+  /**
+   * Capture Drive links for multiple knowledge files sequentially.
+   * Each file is processed one at a time. The onProgress callback
+   * fires after each file with (index, driveInfo).
+   * The onDone callback fires when all files are processed.
+   */
+  function captureAllDriveLinks(knowledgeFiles, gemId, onProgress, onDone) {
+    var index = 0;
+
+    function next() {
+      if (index >= knowledgeFiles.length) {
+        if (onDone) onDone();
+        return;
+      }
+
+      var kf = knowledgeFiles[index];
+      var currentIndex = index;
+
+      // Pause between captures to let Angular fully settle
+      setTimeout(function () {
+        if (!kf._clickTarget) {
+          onProgress(currentIndex, null);
+          index++;
+          next();
+          return;
+        }
+
+        silentCaptureDriveLink(kf._clickTarget, function (driveInfo) {
+          if (driveInfo) {
+            kf.driveId = driveInfo.driveId;
+            kf.driveUrl = driveInfo.driveUrl;
+            persistKnowledgeLink(gemId, kf.name, driveInfo);
+          }
+          onProgress(currentIndex, driveInfo);
+          index++;
+          next();
+        });
+      }, currentIndex === 0 ? 0 : 600);
+    }
+
+    next();
+  }
+
+  /**
+   * After capturing a Drive link, update the gem's knowledgeFiles in
+   * chrome.storage.local so the link persists in the exported JSON.
+   */
+  function persistKnowledgeLink(gemId, fileName, driveInfo) {
+    chrome.runtime.sendMessage({ type: 'GET_ALL_GEMS' }, function (data) {
+      if (!data || !data.gems) return;
+      var gems = data.gems;
+      for (var i = 0; i < gems.length; i++) {
+        if (gems[i].id === gemId) {
+          var kFiles = gems[i].knowledgeFiles || [];
+          for (var j = 0; j < kFiles.length; j++) {
+            if (kFiles[j].name === fileName) {
+              kFiles[j].driveId = driveInfo.driveId;
+              kFiles[j].driveUrl = driveInfo.driveUrl;
+              break;
+            }
+          }
+          // Re-store the updated gem
+          chrome.runtime.sendMessage({ type: 'STORE_GEM', gem: gems[i] }, function () {});
+          break;
+        }
+      }
+    });
   }
 
   // ---------- Init ----------
