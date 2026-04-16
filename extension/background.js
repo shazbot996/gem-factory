@@ -79,4 +79,28 @@ chrome.runtime.onMessageExternal.addListener(function (message, sender, sendResp
     });
     return true;
   }
+
+  // Auth session push from the SPA — lets the extension piggyback on the
+  // user's SPA Google Sign-In when calling the API. See
+  // docs/specs/authentication-authorization-SPEC.md §3.2.
+  if (message.type === 'SET_AUTH') {
+    var session = {
+      token: message.token || null,
+      email: message.email || '',
+      name: message.name || '',
+      expiresAt: message.expiresAt || null,
+      storedAt: Date.now()
+    };
+    chrome.storage.local.set({ authSession: session }, function () {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
+  if (message.type === 'CLEAR_AUTH') {
+    chrome.storage.local.remove('authSession', function () {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
 });

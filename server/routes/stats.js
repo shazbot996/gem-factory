@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
+import requireAdmin from '../middleware/admin.js';
 
 const router = Router();
 
-// GET /api/stats
-router.get('/', async (req, res) => {
+// GET /api/stats — admin only
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const [gemsResult, uniqueResult, usersResult] = await Promise.all([
       pool.query('SELECT COUNT(*)::int AS count FROM gems'),

@@ -137,8 +137,17 @@ gem-factory/
 **Auth flow:**
 - Google Sign-In via Google Identity Services (GIS) library
 - `AuthProvider.tsx` manages token lifecycle with auto-refresh 5 min before expiry
-- Dev bypass: when `VITE_GOOGLE_CLIENT_ID` is empty, auto-authenticates as `dev@localhost`
+- Dev bypass: when `VITE_GOOGLE_CLIENT_ID` is empty, auto-authenticates as `dev@localhost`. Clicking "Sign out" in dev-bypass mode lands on a SignInPage with a "Continue as dev user" button that re-establishes the dev session.
 - Protected routes redirect to sign-in page when unauthenticated
+
+**Enabling real Google Sign-In (supports Schnucks org + personal Gmail):**
+1. In Google Cloud Console → APIs & Services → Credentials, create an "OAuth 2.0 Client ID" of type "Web application".
+2. Under "Authorized JavaScript origins," add `http://localhost:3000`.
+3. Copy `frontend/.env.development.local.example` to `frontend/.env.development.local` (gitignored) and set `VITE_GOOGLE_CLIENT_ID` to the generated client ID.
+4. Set the same value as `GOOGLE_CLIENT_ID` on the API server — either export it in your shell before `make api-start` (docker-compose passes it through) or add it to the Compose env block.
+5. Restart both servers (`make api-start` and `make spa-dev`). The SignInPage now renders a real Google button; dev-bypass is disabled.
+
+Identity acceptance is controlled by `ALLOWED_DOMAIN` (org match) and `ALLOW_GMAIL` (default `true`) on the API server — see `docs/specs/authentication-authorization-SPEC.md` §3.3.
 
 **API client (`api/client.ts`):**
 - `apiRequest<T>()` — fetch wrapper with Bearer token, JSON content type, 401 refresh handling
@@ -260,7 +269,17 @@ Single service for local development:
 Environment variables passed from host (empty defaults for dev bypass):
 - `GOOGLE_CLIENT_ID` — OAuth client ID for token validation
 - `ALLOWED_DOMAIN` — corporate domain restriction
+- `ALLOW_GMAIL` — accept personal Gmail accounts (default `true`)
 - `ADMIN_EMAILS` — comma-separated admin email list (defaults to `charles.schiele@gmail.com`)
+
+## Server → Google Cloud credentials (ADC)
+
+When the API server calls Google Cloud APIs (future: Cloud Logging, Cloud Storage, BigQuery, Vertex AI, etc.), it uses **Application Default Credentials** via the standard Google Cloud client libraries. No credential files are committed to the repo, and user ID tokens are never used for server-to-Google-Cloud calls.
+
+- **Local dev:** run `gcloud auth application-default login` once on the host. Then uncomment the commented-out volume in `docker-compose.yml` that bind-mounts `~/.config/gcloud` read-only into the container. Google Cloud client libraries pick up the credentials automatically.
+- **Cloud Run (production):** attach a service account to the Cloud Run service. ADC resolves to that service account automatically — no env vars or key files needed. IAM roles on the service account determine what Google Cloud resources the server can access.
+
+See `docs/specs/authentication-authorization-SPEC.md` §3.4 for the full description.
 
 ## Makefile
 

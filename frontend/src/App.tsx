@@ -21,14 +21,41 @@ function ProtectedRoutes() {
 }
 
 function SignInPage() {
+  const { signInAsDev } = useAuth();
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
   return (
-    <div className="flex flex-col items-center justify-center h-screen gap-6 bg-gray-50">
+    <div className="flex flex-col items-center justify-center h-screen gap-6 bg-gray-50 px-6">
       <img src="/schnucks-logo.png" alt="Schnucks" className="h-12" />
       <h1 className="text-2xl font-bold text-gray-900">Gem Registry</h1>
-      <p className="text-gray-600">
-        Sign in with your corporate Google account
-      </p>
-      <GoogleSignIn />
+
+      {clientId ? (
+        <>
+          <p className="text-gray-600 text-center">
+            Sign in with your Schnucks account or personal Gmail.
+          </p>
+          <GoogleSignIn />
+        </>
+      ) : (
+        <>
+          <div className="max-w-md text-center text-gray-600 space-y-3">
+            <p>
+              <strong>Developer mode</strong> — Google Sign-In is not configured.
+            </p>
+            <p className="text-sm">
+              Set <code className="bg-gray-200 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code>{' '}
+              in <code className="bg-gray-200 px-1 rounded">frontend/.env.development.local</code>{' '}
+              and restart the dev server to enable real sign-in.
+            </p>
+          </div>
+          <button
+            onClick={signInAsDev}
+            className="px-4 py-2 bg-schnucks-red text-white rounded-md hover:bg-schnucks-red-dark font-medium"
+          >
+            Continue as dev user
+          </button>
+        </>
+      )}
     </div>
   );
 }

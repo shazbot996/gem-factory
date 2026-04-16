@@ -56,9 +56,14 @@ router.get('/', async (req, res) => {
     page = Math.max(1, parseInt(page, 10) || 1);
     limit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
 
+    // Non-admins are scoped to their own gems regardless of any owner query param.
+    // Admins may pass ?owner=<email> to filter by a specific user, or omit it to see all.
+    const admin = isAdmin(req.user.email);
+    const ownerFilter = admin ? (owner || null) : req.user.email;
+
     const { gems, total } = await gemsDb.list(pool, {
       q: q || null,
-      owner: owner || null,
+      owner: ownerFilter,
       status: status || null,
       page,
       limit,
@@ -77,6 +82,13 @@ router.get('/:id', async (req, res) => {
   try {
     const gem = await gemsDb.findById(pool, req.params.id);
     if (!gem) return res.status(404).json({ error: 'Gem not found' });
+
+    // Non-admins can only view their own gems. Return 404 (not 403) for other
+    // users' gems to avoid leaking their existence.
+    if (!isAdmin(req.user.email) && gem.owner.email !== req.user.email) {
+      return res.status(404).json({ error: 'Gem not found' });
+    }
+
     res.json(formatGem(gem));
   } catch (err) {
     console.error('Get gem error:', err);

@@ -9,8 +9,14 @@ services:
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
       ALLOWED_DOMAIN: "${ALLOWED_DOMAIN:-}"
       ADMIN_EMAILS: "${ADMIN_EMAILS:-charles.schiele@gmail.com}"
+      ALLOW_GMAIL: "${ALLOW_GMAIL:-true}"
       NODE_ENV: development
     volumes:
       - ./server:/app
       - /app/node_modules
+      # Uncomment when API code starts calling Google Cloud APIs (requires
+      # `gcloud auth application-default login` on the host). Provides
+      # Application Default Credentials to Google Cloud client libraries.
+      # See docs/specs/authentication-authorization-SPEC.md §3.4.
+      # - ~/.config/gcloud:/root/.config/gcloud:ro
     command: node --watch server.js

@@ -1,12 +1,89 @@
 // Gem Factory Extractor — Popup (Gem List Viewer + Save to Server)
+//
+// Auth: the popup reads an `authSession` from chrome.storage.local that is
+// pushed by the SPA (see docs/specs/authentication-authorization-SPEC.md §3.2).
+// When the session has a token, we send Authorization: Bearer. In dev-bypass
+// mode (token === null, email present) we fall back to X-Dev-User-Email.
 
 var CLOSE_ICON = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>';
+
+// SPA URL used by the "Open Registry" link when the popup is signed out.
+// The SPA is expected to run on localhost:3000 in dev; override via settings.
+var SPA_URL = 'http://localhost:3000';
 
 var contentEl = document.getElementById('content');
 var countEl = document.getElementById('count');
 var statusEl = document.getElementById('status');
+var authStatusEl = document.getElementById('auth-status');
 var apiUrlInput = document.getElementById('api-url');
-var userEmailInput = document.getElementById('user-email');
+
+// ---------- Session state ----------
+
+var currentSession = null;
+
+function isSessionUsable(session) {
+  if (!session) return false;
+  // Dev-bypass session — token null, email present (fall back to X-Dev-User-Email).
+  if (!session.token && session.email) return true;
+  // Production session — token present and not expired.
+  if (session.token) {
+    if (!session.expiresAt) return true;
+    return session.expiresAt > Date.now();
+  }
+  return false;
+}
+
+function renderAuthStatus(session) {
+  // Clear any existing content
+  while (authStatusEl.firstChild) authStatusEl.removeChild(authStatusEl.firstChild);
+
+  if (isSessionUsable(session)) {
+    authStatusEl.className = 'auth-status signed-in';
+
+    var left = document.createElement('div');
+    var label = document.createElement('div');
+    label.className = 'auth-label';
+    label.textContent = 'Signed in as';
+    var emailEl = document.createElement('div');
+    emailEl.className = 'auth-email';
+    emailEl.textContent = session.email;
+    left.appendChild(label);
+    left.appendChild(emailEl);
+    authStatusEl.appendChild(left);
+  } else {
+    authStatusEl.className = 'auth-status signed-out';
+
+    var msg = document.createElement('div');
+    msg.className = 'auth-message';
+    msg.textContent = 'Please sign in to the Schnucks Gem Registry first.';
+    authStatusEl.appendChild(msg);
+
+    var link = document.createElement('button');
+    link.className = 'auth-link';
+    link.textContent = 'Open Registry';
+    link.addEventListener('click', function () {
+      chrome.tabs.create({ url: SPA_URL });
+    });
+    authStatusEl.appendChild(link);
+  }
+}
+
+function loadAuthSession(callback) {
+  chrome.storage.local.get('authSession', function (data) {
+    currentSession = data.authSession || null;
+    if (callback) callback(currentSession);
+  });
+}
+
+// React in real time when the SPA pushes a fresh session (or signs out)
+// while the popup is open.
+chrome.storage.onChanged.addListener(function (changes, areaName) {
+  if (areaName !== 'local' || !changes.authSession) return;
+  currentSession = changes.authSession.newValue || null;
+  renderAuthStatus(currentSession);
+  // Refresh the save button state in the rendered list
+  updateSaveButtonState();
+});
 
 // ---------- Settings persistence ----------
 
@@ -14,7 +91,6 @@ function loadSettings(callback) {
   chrome.storage.local.get('gfSettings', function (data) {
     var settings = data.gfSettings || {};
     apiUrlInput.value = settings.apiUrl || 'http://localhost:9090';
-    userEmailInput.value = settings.userEmail || '';
     if (callback) callback();
   });
 }
@@ -23,13 +99,11 @@ function saveSettings() {
   chrome.storage.local.set({
     gfSettings: {
       apiUrl: apiUrlInput.value.trim(),
-      userEmail: userEmailInput.value.trim(),
     }
   });
 }
 
 apiUrlInput.addEventListener('change', saveSettings);
-userEmailInput.addEventListener('change', saveSettings);
 
 // ---------- Status messages ----------
 
@@ -44,6 +118,19 @@ function showStatus(message, type) {
 function clearStatus() {
   statusEl.textContent = '';
   statusEl.className = '';
+}
+
+// ---------- Save button state ----------
+
+var saveBtnRef = null;
+
+function updateSaveButtonState() {
+  if (!saveBtnRef) return;
+  var usable = isSessionUsable(currentSession);
+  saveBtnRef.disabled = !usable;
+  saveBtnRef.title = usable
+    ? 'Send these gems to the Gem Factory API'
+    : 'Sign in to the Schnucks Gem Registry to enable.';
 }
 
 // ---------- Render gem list ----------
@@ -62,6 +149,7 @@ function render(data) {
     hint.textContent = 'Visit a gem edit page on gemini.google.com and click the blue diamond button to extract.';
     empty.appendChild(hint);
     contentEl.appendChild(empty);
+    saveBtnRef = null;
     return;
   }
 
@@ -147,6 +235,8 @@ function render(data) {
     saveToServer(gems, saveBtn);
   });
   footer.appendChild(saveBtn);
+  saveBtnRef = saveBtn;
+  updateSaveButtonState();
 
   var exportBtn = document.createElement('button');
   exportBtn.className = 'btn-export';
@@ -187,16 +277,14 @@ function render(data) {
 
 function saveToServer(gems, btn) {
   var apiUrl = apiUrlInput.value.trim();
-  var userEmail = userEmailInput.value.trim();
 
   if (!apiUrl) {
     showStatus('Please enter the API server URL.', 'error');
     apiUrlInput.focus();
     return;
   }
-  if (!userEmail) {
-    showStatus('Please enter your email address.', 'error');
-    userEmailInput.focus();
+  if (!isSessionUsable(currentSession)) {
+    showStatus('Please sign in to the Schnucks Gem Registry first.', 'error');
     return;
   }
 
@@ -232,12 +320,18 @@ function saveToServer(gems, btn) {
 
   var url = apiUrl.replace(/\/+$/, '') + '/api/gems/import';
 
+  // Prefer Bearer; fall back to X-Dev-User-Email in dev-bypass mode where
+  // the SPA has no real token.
+  var headers = { 'Content-Type': 'application/json' };
+  if (currentSession.token) {
+    headers['Authorization'] = 'Bearer ' + currentSession.token;
+  } else {
+    headers['X-Dev-User-Email'] = currentSession.email;
+  }
+
   fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Dev-User-Email': userEmail,
-    },
+    headers: headers,
     body: JSON.stringify(payload),
   })
     .then(function (response) {
@@ -257,11 +351,13 @@ function saveToServer(gems, btn) {
       btn.disabled = false;
       btn.textContent = 'Save to Gem Factory';
       saveSettings();
+      updateSaveButtonState();
     })
     .catch(function (err) {
       showStatus('Error: ' + err.message, 'error');
       btn.disabled = false;
       btn.textContent = 'Save to Gem Factory';
+      updateSaveButtonState();
     });
 }
 
@@ -286,5 +382,8 @@ function loadGems() {
 // ---------- Init ----------
 
 loadSettings(function () {
-  loadGems();
+  loadAuthSession(function (session) {
+    renderAuthStatus(session);
+    loadGems();
+  });
 });

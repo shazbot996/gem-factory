@@ -2,6 +2,7 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import * as usersDb from '../db/users.js';
 import * as gemsDb from '../db/gems.js';
+import requireAdmin, { isAdmin } from '../middleware/admin.js';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ router.get('/me', async (req, res) => {
       return res.json({
         email: req.user.email,
         displayName: req.user.name,
+        isAdmin: isAdmin(req.user.email),
         gemCount: 0,
         firstImportAt: null,
         lastImportAt: null,
@@ -24,6 +26,7 @@ router.get('/me', async (req, res) => {
       id: user.id,
       email: user.email,
       displayName: user.display_name,
+      isAdmin: isAdmin(user.email),
       gemCount,
       firstImportAt: user.first_import_at,
       lastImportAt: user.last_import_at,
@@ -34,8 +37,8 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// GET /api/users
-router.get('/', async (req, res) => {
+// GET /api/users — admin only
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const users = await usersDb.listWithGemCounts(pool);
     res.json({

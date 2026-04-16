@@ -62,12 +62,13 @@ describe('API integration tests', () => {
       assert.equal(json.importedIds.length, 1);
     });
 
-    it('skips duplicate import (same user, same instructions)', async () => {
+    it('upserts duplicate import (same user, same instructions) and counts as updated', async () => {
       const gem = { name: 'Test Gem', instructions: 'You are a helpful assistant.' };
       await api('POST', '/api/gems/import', { body: { gems: [gem] } });
       const { json } = await api('POST', '/api/gems/import', { body: { gems: [gem] } });
       assert.equal(json.imported, 0);
-      assert.equal(json.skipped, 1);
+      assert.equal(json.updated, 1);
+      assert.equal(json.skipped, 0);
     });
 
     it('rejects empty gems array', async () => {
@@ -162,20 +163,147 @@ describe('API integration tests', () => {
   });
 
   describe('GET /api/users/me', () => {
-    it('returns current user profile', async () => {
+    it('returns current user profile with isAdmin=false for non-admin', async () => {
       const { status, json } = await api('GET', '/api/users/me');
       assert.equal(status, 200);
       assert.equal(json.email, 'dev@localhost');
+      assert.equal(json.isAdmin, false);
+    });
+
+    it('returns isAdmin=true for an ADMIN_EMAILS user', async () => {
+      const { status, json } = await api('GET', '/api/users/me', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.email, 'charles.schiele@gmail.com');
+      assert.equal(json.isAdmin, true);
     });
   });
 
-  describe('GET /api/stats', () => {
-    it('returns org-wide statistics', async () => {
-      const { status, json } = await api('GET', '/api/stats');
+  describe('GET /api/stats (admin-only)', () => {
+    it('returns 403 for non-admin', async () => {
+      const { status } = await api('GET', '/api/stats');
+      assert.equal(status, 403);
+    });
+
+    it('returns org-wide statistics for admin', async () => {
+      const { status, json } = await api('GET', '/api/stats', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
       assert.equal(status, 200);
       assert.equal(json.totalGems, 0);
       assert.equal(json.uniqueGems, 0);
       assert.equal(json.duplicateClusters, 0);
+    });
+  });
+
+  describe('GET /api/users (admin-only)', () => {
+    it('returns 403 for non-admin', async () => {
+      const { status } = await api('GET', '/api/users');
+      assert.equal(status, 403);
+    });
+
+    it('returns user list for admin', async () => {
+      await api('POST', '/api/gems/import', {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+        body: { gems: [{ name: 'Alice Gem', instructions: 'Alice instructions.' }] },
+      });
+      const { status, json } = await api('GET', '/api/users', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      assert.equal(status, 200);
+      assert.ok(Array.isArray(json.users));
+      assert.ok(json.users.some((u) => u.email === 'alice@example.com'));
+    });
+  });
+
+  describe('Ownership scoping', () => {
+    beforeEach(async () => {
+      // Seed: Alice imports one gem, Bob imports one gem
+      await api('POST', '/api/gems/import', {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+        body: { gems: [{ name: 'Alice Gem', instructions: 'Alice instructions.' }] },
+      });
+      await api('POST', '/api/gems/import', {
+        headers: { 'X-Dev-User-Email': 'bob@example.com' },
+        body: { gems: [{ name: 'Bob Gem', instructions: 'Bob instructions.' }] },
+      });
+    });
+
+    it('GET /api/gems returns only the caller own gems for a non-admin', async () => {
+      const { status, json } = await api('GET', '/api/gems', {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.gems.length, 1);
+      assert.equal(json.gems[0].name, 'Alice Gem');
+      assert.equal(json.gems[0].owner.email, 'alice@example.com');
+    });
+
+    it('GET /api/gems ignores owner query param for a non-admin', async () => {
+      // Alice tries to filter for Bob's gems — should still see only her own.
+      const { status, json } = await api('GET', '/api/gems?owner=bob@example.com', {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.gems.length, 1);
+      assert.equal(json.gems[0].owner.email, 'alice@example.com');
+    });
+
+    it('GET /api/gems with no filter returns all gems for an admin', async () => {
+      const { status, json } = await api('GET', '/api/gems', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.gems.length, 2);
+    });
+
+    it('GET /api/gems?owner= filter works for an admin', async () => {
+      const { status, json } = await api('GET', '/api/gems?owner=alice@example.com', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.gems.length, 1);
+      assert.equal(json.gems[0].owner.email, 'alice@example.com');
+    });
+
+    it('GET /api/gems/:id returns 404 for a non-admin requesting another user gem', async () => {
+      // Find Bob's gem id via admin listing
+      const { json: adminList } = await api('GET', '/api/gems?owner=bob@example.com', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      const bobGemId = adminList.gems[0].id;
+
+      const { status } = await api('GET', `/api/gems/${bobGemId}`, {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+      });
+      assert.equal(status, 404);
+    });
+
+    it('GET /api/gems/:id returns the gem for its owner', async () => {
+      const { json: aliceList } = await api('GET', '/api/gems', {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+      });
+      const aliceGemId = aliceList.gems[0].id;
+
+      const { status, json } = await api('GET', `/api/gems/${aliceGemId}`, {
+        headers: { 'X-Dev-User-Email': 'alice@example.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.owner.email, 'alice@example.com');
+    });
+
+    it('GET /api/gems/:id returns any gem for an admin', async () => {
+      const { json: adminList } = await api('GET', '/api/gems?owner=bob@example.com', {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      const bobGemId = adminList.gems[0].id;
+
+      const { status, json } = await api('GET', `/api/gems/${bobGemId}`, {
+        headers: { 'X-Dev-User-Email': 'charles.schiele@gmail.com' },
+      });
+      assert.equal(status, 200);
+      assert.equal(json.owner.email, 'bob@example.com');
     });
   });
 });

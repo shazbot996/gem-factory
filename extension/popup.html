@@ -228,6 +228,66 @@
       background: #fce8e6;
       color: #c5221f;
     }
+
+    .auth-status {
+      padding: 10px 16px;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .auth-status.signed-in {
+      background: #e6f4ea;
+      color: #137333;
+    }
+
+    .auth-status.signed-in .auth-label {
+      font-size: 10px;
+      color: #5f6368;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .auth-status.signed-in .auth-email {
+      font-weight: 500;
+      color: #202124;
+      word-break: break-all;
+    }
+
+    .auth-status.signed-out {
+      background: #fff4e5;
+      color: #5f6368;
+      flex-direction: column;
+      align-items: stretch;
+      text-align: center;
+      gap: 6px;
+    }
+
+    .auth-status.signed-out .auth-message {
+      color: #b06000;
+      font-weight: 500;
+    }
+
+    .auth-status.signed-out .auth-link {
+      color: #1a73e8;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 5px 10px;
+      border: 1px solid #1a73e8;
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+      font-family: inherit;
+      font-size: 12px;
+      display: inline-block;
+    }
+
+    .auth-status.signed-out .auth-link:hover {
+      background: #e8f0fe;
+    }
   </style>
 </head>
 <body>
@@ -235,14 +295,11 @@
     <h1>Gem Factory</h1>
     <span class="count" id="count">0 gems</span>
   </div>
+  <div id="auth-status"></div>
   <div class="settings">
     <div class="settings-row">
       <label for="api-url">API Server URL</label>
       <input type="text" id="api-url" placeholder="http://localhost:9090">
-    </div>
-    <div class="settings-row">
-      <label for="user-email">Your Email</label>
-      <input type="email" id="user-email" placeholder="you@example.com">
     </div>
   </div>
   <div id="status"></div>

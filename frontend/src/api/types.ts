@@ -46,6 +46,7 @@ export interface UserProfile {
   id?: string;
   email: string;
   displayName: string;
+  isAdmin: boolean;
   gemCount: number;
   firstImportAt: string | null;
   lastImportAt: string | null;

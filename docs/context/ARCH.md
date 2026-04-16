@@ -407,10 +407,20 @@ If the extension is not detected (API returns undefined), the SPA falls back to 
 | `PORT` | Server listen port (set by Cloud Run) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `GOOGLE_CLIENT_ID` | OAuth client ID for token validation |
-| `ALLOWED_DOMAIN` | Corporate domain for `hd` claim check (e.g., `corp.example.com`) |
+| `ALLOWED_DOMAIN` | Customer's org Google Workspace domain checked against the ID token's `hd` claim |
+| `ALLOW_GMAIL` | Boolean — accept personal Gmail accounts (default `true`) |
+| `ADMIN_EMAILS` | Comma-separated admin email list (default `charles.schiele@gmail.com`) |
 | `EXTENSION_ID` | Chrome extension ID for SPA ↔ extension messaging |
 | `DRIVE_SYNC_ENABLED` | Feature flag for Drive API metadata sync |
-| `SIMILARITY_THRESHOLD` | Float (0–1) for duplicate clustering, default 0.85 |
+
+### 7.5 Server → Google Cloud credentials
+
+Whenever the API server calls Google Cloud APIs, it uses **Application Default Credentials (ADC)** via the standard Google Cloud client libraries. User ID tokens are never used for server-to-Google-Cloud calls — the two credential paths are entirely separate.
+
+- **Local development:** the developer runs `gcloud auth application-default login` once on the host. `docker-compose.yml` includes a commented-out volume that bind-mounts `~/.config/gcloud` read-only into the container; uncomment it when server code first calls a Google Cloud library.
+- **Cloud Run (production):** the service account attached to the Cloud Run service provides ADC automatically. IAM grants on that service account determine what resources the server can read or write. No env vars or key files are needed.
+
+See `docs/specs/authentication-authorization-SPEC.md` §3.4 for the full specification.
 
 ## 8. Key Design Decisions
 

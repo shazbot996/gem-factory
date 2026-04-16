@@ -2,7 +2,23 @@ import { OAuth2Client } from 'google-auth-library';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN;
+const ALLOW_GMAIL = process.env.ALLOW_GMAIL !== 'false'; // default true
 const client = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
+
+/**
+ * Decide whether a validated Google ID token payload identifies an
+ * acceptable user. Accepts:
+ *   - Customer org: payload.hd === allowedDomain
+ *   - Personal Gmail: no hd claim and email ends in @gmail.com (when allowGmail)
+ * Extracted as a pure function so it can be unit-tested directly.
+ */
+export function isIdentityAllowed(payload, { allowedDomain, allowGmail }) {
+  const hd = payload && payload.hd;
+  const email = (payload && payload.email) || '';
+  const isCustomerOrg = !!allowedDomain && hd === allowedDomain;
+  const isGmail = !hd && /@gmail\.com$/i.test(email);
+  return isCustomerOrg || (allowGmail && isGmail);
+}
 
 export default async function authMiddleware(req, res, next) {
   // Skip auth for health check
@@ -31,8 +47,10 @@ export default async function authMiddleware(req, res, next) {
     });
     const payload = ticket.getPayload();
 
-    if (ALLOWED_DOMAIN && payload.hd !== ALLOWED_DOMAIN) {
-      return res.status(403).json({ error: `Access restricted to ${ALLOWED_DOMAIN}` });
+    if (!isIdentityAllowed(payload, { allowedDomain: ALLOWED_DOMAIN, allowGmail: ALLOW_GMAIL })) {
+      return res.status(403).json({
+        error: 'This account is not authorized. Use your organization account or a personal Gmail account.',
+      });
     }
 
     req.user = { email: payload.email, name: payload.name };
