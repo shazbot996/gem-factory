@@ -1,109 +1,63 @@
-// Gem Factory Extractor — Popup (Gem List Viewer + Save to Server)
+// Gem Factory Extractor — Popup
 //
-// Auth: the popup reads an `authSession` from chrome.storage.local that is
-// pushed by the SPA (see docs/specs/authentication-authorization-SPEC.md §3.2).
-// When the session has a token, we send Authorization: Bearer. In dev-bypass
-// mode (token === null, email present) we fall back to X-Dev-User-Email.
+// Lists extracted gems held in chrome.storage.local, then saves them directly
+// to a Google Cloud Storage bucket via the user's OAuth credentials. The bucket
+// and OAuth client ID come from config.js (and must match manifest.json's
+// oauth2 block). See docs/decisions/0001-replace-sql-and-api-server-with-direct-gcs-writes.md.
 
 var CLOSE_ICON = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>';
-
-// SPA URL used by the "Open Registry" link when the popup is signed out.
-// The SPA is expected to run on localhost:3000 in dev; override via settings.
-var SPA_URL = 'http://localhost:3000';
 
 var contentEl = document.getElementById('content');
 var countEl = document.getElementById('count');
 var statusEl = document.getElementById('status');
 var authStatusEl = document.getElementById('auth-status');
-var apiUrlInput = document.getElementById('api-url');
+var bucketDisplayEl = document.getElementById('bucket-display');
 
-// ---------- Session state ----------
+var currentEmail = null;
+var saveBtnRef = null;
 
-var currentSession = null;
+// ---------- Bucket info ----------
 
-function isSessionUsable(session) {
-  if (!session) return false;
-  // Dev-bypass session — token null, email present (fall back to X-Dev-User-Email).
-  if (!session.token && session.email) return true;
-  // Production session — token present and not expired.
-  if (session.token) {
-    if (!session.expiresAt) return true;
-    return session.expiresAt > Date.now();
-  }
-  return false;
+function renderBucketInfo() {
+  if (!bucketDisplayEl) return;
+  var bucket = (window.GEM_FACTORY_CONFIG && window.GEM_FACTORY_CONFIG.bucketName) || '(not configured)';
+  bucketDisplayEl.textContent = bucket;
 }
 
-function renderAuthStatus(session) {
-  // Clear any existing content
+// ---------- Auth display ----------
+
+function renderAuthStatus(email) {
   while (authStatusEl.firstChild) authStatusEl.removeChild(authStatusEl.firstChild);
 
-  if (isSessionUsable(session)) {
+  if (email) {
     authStatusEl.className = 'auth-status signed-in';
-
     var left = document.createElement('div');
     var label = document.createElement('div');
     label.className = 'auth-label';
     label.textContent = 'Signed in as';
     var emailEl = document.createElement('div');
     emailEl.className = 'auth-email';
-    emailEl.textContent = session.email;
+    emailEl.textContent = email;
     left.appendChild(label);
     left.appendChild(emailEl);
     authStatusEl.appendChild(left);
   } else {
     authStatusEl.className = 'auth-status signed-out';
-
     var msg = document.createElement('div');
     msg.className = 'auth-message';
-    msg.textContent = 'Please sign in to the Schnucks Gem Registry first.';
+    msg.textContent = 'Click Save to authorize your Google account.';
     authStatusEl.appendChild(msg);
-
-    var link = document.createElement('button');
-    link.className = 'auth-link';
-    link.textContent = 'Open Registry';
-    link.addEventListener('click', function () {
-      chrome.tabs.create({ url: SPA_URL });
-    });
-    authStatusEl.appendChild(link);
   }
-}
-
-function loadAuthSession(callback) {
-  chrome.storage.local.get('authSession', function (data) {
-    currentSession = data.authSession || null;
-    if (callback) callback(currentSession);
-  });
-}
-
-// React in real time when the SPA pushes a fresh session (or signs out)
-// while the popup is open.
-chrome.storage.onChanged.addListener(function (changes, areaName) {
-  if (areaName !== 'local' || !changes.authSession) return;
-  currentSession = changes.authSession.newValue || null;
-  renderAuthStatus(currentSession);
-  // Refresh the save button state in the rendered list
   updateSaveButtonState();
-});
-
-// ---------- Settings persistence ----------
-
-function loadSettings(callback) {
-  chrome.storage.local.get('gfSettings', function (data) {
-    var settings = data.gfSettings || {};
-    apiUrlInput.value = settings.apiUrl || 'http://localhost:9090';
-    if (callback) callback();
-  });
 }
 
-function saveSettings() {
-  chrome.storage.local.set({
-    gfSettings: {
-      apiUrl: apiUrlInput.value.trim(),
-    }
-  });
+function updateSaveButtonState() {
+  if (!saveBtnRef) return;
+  // Save is always allowed — first click triggers the interactive OAuth flow.
+  saveBtnRef.disabled = false;
+  saveBtnRef.title = 'Save these gems to ' +
+    ((window.GEM_FACTORY_CONFIG && window.GEM_FACTORY_CONFIG.bucketName) || 'the registry');
 }
-
-apiUrlInput.addEventListener('change', saveSettings);
 
 // ---------- Status messages ----------
 
@@ -120,20 +74,7 @@ function clearStatus() {
   statusEl.className = '';
 }
 
-// ---------- Save button state ----------
-
-var saveBtnRef = null;
-
-function updateSaveButtonState() {
-  if (!saveBtnRef) return;
-  var usable = isSessionUsable(currentSession);
-  saveBtnRef.disabled = !usable;
-  saveBtnRef.title = usable
-    ? 'Send these gems to the Gem Factory API'
-    : 'Sign in to the Schnucks Gem Registry to enable.';
-}
-
-// ---------- Render gem list ----------
+// ---------- Gem list rendering ----------
 
 function render(data) {
   var gems = (data && data.gems) || [];
@@ -153,7 +94,6 @@ function render(data) {
     return;
   }
 
-  // Sort newest first
   var sorted = gems.slice().sort(function (a, b) {
     return (b.extractedAt || '').localeCompare(a.extractedAt || '');
   });
@@ -224,15 +164,15 @@ function render(data) {
   contentEl.innerHTML = '';
   contentEl.appendChild(list);
 
-  // Footer with actions
+  // ---------- Footer ----------
   var footer = document.createElement('div');
   footer.className = 'footer';
 
   var saveBtn = document.createElement('button');
   saveBtn.className = 'btn-save';
-  saveBtn.textContent = 'Save to Gem Factory';
+  saveBtn.textContent = 'Save to Registry';
   saveBtn.addEventListener('click', function () {
-    saveToServer(gems, saveBtn);
+    saveToGCS(gems, saveBtn);
   });
   footer.appendChild(saveBtn);
   saveBtnRef = saveBtn;
@@ -244,12 +184,14 @@ function render(data) {
   exportBtn.addEventListener('click', function () {
     var payload = gems.map(function (g) {
       return {
+        id: g.id,
         name: g.name,
         description: g.description || '',
         instructions: g.instructions,
         knowledgeFiles: g.knowledgeFiles || [],
         defaultTools: g.defaultTools || [],
-        source: g.source || 'edit_page'
+        source: g.source || 'edit_page',
+        extractedAt: g.extractedAt || null,
       };
     });
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).then(function () {
@@ -273,92 +215,117 @@ function render(data) {
   contentEl.appendChild(footer);
 }
 
-// ---------- Save to API server ----------
+// ---------- Save to GCS ----------
 
-function saveToServer(gems, btn) {
-  var apiUrl = apiUrlInput.value.trim();
+function mergeGems(existing, incoming) {
+  var byId = {};
+  for (var i = 0; i < existing.length; i++) {
+    var g = existing[i];
+    if (g && g.id) byId[g.id] = g;
+  }
+  for (var j = 0; j < incoming.length; j++) {
+    var n = incoming[j];
+    if (n && n.id) byId[n.id] = serializeGem(n);
+  }
+  var out = [];
+  for (var k in byId) {
+    if (Object.prototype.hasOwnProperty.call(byId, k)) out.push(byId[k]);
+  }
+  return out;
+}
 
-  if (!apiUrl) {
-    showStatus('Please enter the API server URL.', 'error');
-    apiUrlInput.focus();
+function serializeGem(g) {
+  return {
+    id: g.id,
+    name: g.name,
+    description: g.description || '',
+    instructions: g.instructions,
+    knowledgeFiles: (g.knowledgeFiles || []).map(function (f) {
+      if (typeof f === 'string') return { name: f };
+      return {
+        name: f.name,
+        type: f.type || '',
+        mimeType: f.mimeType || '',
+        driveId: f.driveId || null,
+        driveUrl: f.driveUrl || null,
+      };
+    }),
+    defaultTools: g.defaultTools || [],
+    source: g.source || 'edit_page',
+    extractedAt: g.extractedAt || null,
+  };
+}
+
+async function saveToGCS(gems, btn) {
+  var bucket = window.GEM_FACTORY_CONFIG && window.GEM_FACTORY_CONFIG.bucketName;
+  if (!bucket) {
+    showStatus('Bucket name not configured (check config.js).', 'error');
     return;
   }
-  if (!isSessionUsable(currentSession)) {
-    showStatus('Please sign in to the Schnucks Gem Registry first.', 'error');
+  if (!gems || gems.length === 0) {
+    showStatus('No gems to save.', 'error');
     return;
   }
 
   clearStatus();
   btn.disabled = true;
-  btn.textContent = 'Saving\u2026';
+  btn.textContent = 'Saving…';
 
-  // Map extension gem format to API import format
-  var payload = {
-    gems: gems.map(function (g) {
-      return {
-        name: g.name,
-        description: g.description || '',
-        instructions: g.instructions,
-        icon: null,
-        source: g.source || 'edit_page',
-        geminiId: g.id || null,
-        knowledgeFiles: (g.knowledgeFiles || []).map(function (f) {
-          if (typeof f === 'string') return { name: f };
-          return {
-            name: f.name,
-            type: f.type || '',
-            mimeType: f.mimeType || '',
-            driveId: f.driveId || null,
-            driveUrl: f.driveUrl || null,
-          };
-        }),
-        defaultTools: g.defaultTools || [],
-        extractedAt: g.extractedAt || null,
-      };
-    })
-  };
+  var token = null;
 
-  var url = apiUrl.replace(/\/+$/, '') + '/api/gems/import';
+  try {
+    token = await window.GemFactoryGCS.getAccessToken(true);
 
-  // Prefer Bearer; fall back to X-Dev-User-Email in dev-bypass mode where
-  // the SPA has no real token.
-  var headers = { 'Content-Type': 'application/json' };
-  if (currentSession.token) {
-    headers['Authorization'] = 'Bearer ' + currentSession.token;
-  } else {
-    headers['X-Dev-User-Email'] = currentSession.email;
-  }
-
-  fetch(url, {
-    method: 'POST',
-    headers: headers,
-    body: JSON.stringify(payload),
-  })
-    .then(function (response) {
-      if (!response.ok) {
-        return response.json().then(function (data) {
-          throw new Error(data.error || 'Server returned ' + response.status);
-        });
+    if (!currentEmail) {
+      try {
+        currentEmail = await window.GemFactoryGCS.getUserEmail(token);
+        renderAuthStatus(currentEmail);
+      } catch (e) {
+        // Fall through with no email — we have a token but couldn't discover
+        // the profile email. This is fatal — the object path requires email.
+        throw new Error('Could not determine your Google account email. ' + e.message);
       }
-      return response.json();
-    })
-    .then(function (result) {
-      var parts = [];
-      if (result.imported > 0) parts.push(result.imported + ' imported');
-      if (result.updated > 0) parts.push(result.updated + ' updated');
-      if (result.skipped > 0) parts.push(result.skipped + ' skipped');
-      showStatus('Saved: ' + (parts.join(', ') || '0 gems'), 'success');
-      btn.disabled = false;
-      btn.textContent = 'Save to Gem Factory';
-      saveSettings();
-      updateSaveButtonState();
-    })
-    .catch(function (err) {
-      showStatus('Error: ' + err.message, 'error');
-      btn.disabled = false;
-      btn.textContent = 'Save to Gem Factory';
-      updateSaveButtonState();
-    });
+    }
+
+    // Optimistic concurrency: read, merge, write with If-Match.
+    var loaded = await window.GemFactoryGCS.loadUserGems(bucket, currentEmail, token);
+    var nextDocument = {
+      schemaVersion: 1,
+      owner: currentEmail,
+      updatedAt: new Date().toISOString(),
+      gems: mergeGems(loaded.document.gems || [], gems),
+    };
+
+    try {
+      await window.GemFactoryGCS.saveUserGems(bucket, currentEmail, token, nextDocument, loaded.etag);
+    } catch (err) {
+      // 412 = etag mismatch (someone else wrote in the gap). Refetch, remerge, retry once.
+      if (err && err.status === 412) {
+        var second = await window.GemFactoryGCS.loadUserGems(bucket, currentEmail, token);
+        var retryDocument = {
+          schemaVersion: 1,
+          owner: currentEmail,
+          updatedAt: new Date().toISOString(),
+          gems: mergeGems(second.document.gems || [], gems),
+        };
+        await window.GemFactoryGCS.saveUserGems(bucket, currentEmail, token, retryDocument, second.etag);
+      } else if (err && err.status === 401) {
+        // Token rejected — drop the cached token so the next attempt re-prompts.
+        await window.GemFactoryGCS.removeCachedAuthToken(token);
+        throw new Error('Authorization expired. Click Save again to re-authorize.');
+      } else {
+        throw err;
+      }
+    }
+
+    showStatus('Saved ' + gems.length + (gems.length === 1 ? ' gem to ' : ' gems to ') + bucket, 'success');
+  } catch (err) {
+    showStatus('Error: ' + (err.message || String(err)), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save to Registry';
+    updateSaveButtonState();
+  }
 }
 
 // ---------- Helpers ----------
@@ -381,9 +348,19 @@ function loadGems() {
 
 // ---------- Init ----------
 
-loadSettings(function () {
-  loadAuthSession(function (session) {
-    renderAuthStatus(session);
-    loadGems();
-  });
-});
+renderBucketInfo();
+renderAuthStatus(null);
+
+// Best-effort: try to discover the signed-in profile email without
+// triggering an interactive prompt. Falls back gracefully if no Google
+// profile is signed in.
+if (window.GemFactoryGCS && window.GemFactoryGCS.getUserEmail) {
+  window.GemFactoryGCS.getUserEmail()
+    .then(function (email) {
+      currentEmail = email;
+      renderAuthStatus(email);
+    })
+    .catch(function () { /* No profile signed in — leave as anonymous. */ });
+}
+
+loadGems();

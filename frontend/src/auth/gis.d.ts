@@ -34,5 +34,30 @@ declare namespace google {
 
       function revoke(email: string, callback: () => void): void;
     }
+
+    namespace oauth2 {
+      interface TokenResponse {
+        access_token: string;
+        expires_in: number;
+        token_type: string;
+        scope: string;
+        error?: string;
+        error_description?: string;
+      }
+
+      interface TokenClient {
+        requestAccessToken(overrideConfig?: { prompt?: string; hint?: string }): void;
+      }
+
+      function initTokenClient(config: {
+        client_id: string;
+        scope: string;
+        callback: (response: TokenResponse) => void;
+        prompt?: string;
+        hint?: string;
+      }): TokenClient;
+
+      function revoke(accessToken: string, done?: () => void): void;
+    }
   }
 }

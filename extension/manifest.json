@@ -1,19 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Gem Factory Extractor",
-  "version": "0.11.0",
-  "description": "Extract Gemini gem configurations for the Gem Factory registry",
+  "version": "0.12.0",
+  "description": "Extract Gemini gem configurations and save them directly to a Google Cloud Storage bucket",
   "permissions": [
     "storage",
+    "identity",
     "activeTab"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
-    "http://localhost:9090/*",
-    "https://*.run.app/*"
+    "https://storage.googleapis.com/*"
   ],
-  "externally_connectable": {
-    "matches": ["http://localhost:3000/*"]
+  "oauth2": {
+    "client_id": "424099097598-6nid5rcbprkurdiivu76dhl7m8o82cue.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/devstorage.read_write",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
   },
   "action": {
     "default_popup": "popup.html",
@@ -29,7 +33,7 @@
   "content_scripts": [
     {
       "matches": ["https://gemini.google.com/*"],
-      "js": ["content-script.js"],
+      "js": ["config.js", "content-script.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     },

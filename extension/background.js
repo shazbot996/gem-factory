@@ -1,17 +1,23 @@
 // ==========================================================================
 // Gem Factory Extractor — Background Service Worker
-// Handles: local gem storage, message routing, future SPA communication
+//
+// Maintains the local accumulator of extracted gems in chrome.storage.local.
+// Saving to GCS happens directly from popup.js — the background script no
+// longer brokers anything with an external SPA.
 // ==========================================================================
 
-// ---------- Internal Messages (from content script and popup) ----------
+// Make config available to the service worker if needed by future code paths.
+try {
+  importScripts('config.js');
+} catch (e) {
+  // Non-fatal — config.js is optional in the service worker for now.
+}
 
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   if (message.type === 'STORE_GEM') {
-    // Store the extracted gem, accumulating across edit pages
     chrome.storage.local.get('extractedGems', function (data) {
       var existing = (data.extractedGems && data.extractedGems.gems) || [];
 
-      // Replace if same gem ID already stored, otherwise append
       var found = false;
       for (var i = 0; i < existing.length; i++) {
         if (existing[i].id === message.gem.id) {
@@ -58,48 +64,6 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       chrome.storage.local.set({ extractedGems: result }, function () {
         sendResponse({ success: true, totalGems: filtered.length });
       });
-    });
-    return true;
-  }
-});
-
-// ---------- External Messages (future SPA communication — ARCH.md section 7.2) ----------
-
-chrome.runtime.onMessageExternal.addListener(function (message, sender, sendResponse) {
-  if (message.type === 'GET_GEMS') {
-    chrome.storage.local.get('extractedGems', function (data) {
-      sendResponse(data.extractedGems || { gems: [] });
-    });
-    return true;
-  }
-
-  if (message.type === 'CLEAR_GEMS') {
-    chrome.storage.local.remove('extractedGems', function () {
-      sendResponse({ success: true });
-    });
-    return true;
-  }
-
-  // Auth session push from the SPA — lets the extension piggyback on the
-  // user's SPA Google Sign-In when calling the API. See
-  // docs/specs/authentication-authorization-SPEC.md §3.2.
-  if (message.type === 'SET_AUTH') {
-    var session = {
-      token: message.token || null,
-      email: message.email || '',
-      name: message.name || '',
-      expiresAt: message.expiresAt || null,
-      storedAt: Date.now()
-    };
-    chrome.storage.local.set({ authSession: session }, function () {
-      sendResponse({ success: true });
-    });
-    return true;
-  }
-
-  if (message.type === 'CLEAR_AUTH') {
-    chrome.storage.local.remove('authSession', function () {
-      sendResponse({ success: true });
     });
     return true;
   }

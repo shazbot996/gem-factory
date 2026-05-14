@@ -3,7 +3,28 @@ type: spec
 title: "Gem Factory — Authentication & Authorization"
 scope: Cross-module auth layer covering the Chrome extension, API server, SPA frontend, and server-side Google Cloud access
 date: 2026-04-16
+status: Largely superseded by ADR-0001 (2026-05-14) — the API server and Cloud SQL described here no longer exist
 ---
+
+> **Status note (2026-05-14):** Most of this spec is historical. ADR-0001
+> retired the Express API server and the Cloud SQL database; the SPA and
+> the Chrome extension now read/write a Google Cloud Storage bucket
+> directly. The following sections are obsolete:
+>
+> - §3.2 (SPA → extension auth push, `SET_AUTH`/`CLEAR_AUTH`): the
+>   extension obtains its own OAuth access token via
+>   `chrome.identity.getAuthToken`. The `externally_connectable` channel
+>   was removed.
+> - §3.3 (API identity acceptance — `ALLOWED_DOMAIN`, `ALLOW_GMAIL`): there
+>   is no API; authorization comes from IAM bindings on the GCS bucket.
+> - §3.4 (server-side ADC): no server.
+> - §3.5 (admin role): no admin endpoints; admin-scope is expressed via
+>   `roles/storage.objectAdmin` on the bucket.
+>
+> The historical content is preserved below for reference and for the
+> rationale behind the current OAuth client setup. See
+> `docs/context/ARCH.md` and `docs/deployment/gcs-bucket-setup.md` for the
+> current auth model.
 
 ## 1. Problem Statement
 

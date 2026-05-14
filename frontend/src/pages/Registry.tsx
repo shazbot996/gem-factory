@@ -1,8 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { listGems } from '../api/gems';
-import { listUsers } from '../api/users';
-import type { Gem, UserListItem } from '../api/types';
+import { useAllGems } from '../data/GemsProvider';
 import GemTable from '../components/GemTable';
 import SearchBar from '../components/SearchBar';
 import Pagination from '../components/Pagination';
@@ -16,39 +14,38 @@ export default function Registry() {
   const owner = searchParams.get('owner') || '';
   const page = Number(searchParams.get('page')) || 1;
 
-  const [gems, setGems] = useState<Gem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { gems, loading, error } = useAllGems();
 
-  useEffect(() => {
-    listUsers()
-      .then((res) => setUsers(res.users))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await listGems({
-          q: q || undefined,
-          owner: owner || undefined,
-          page,
-          limit: PAGE_SIZE,
-        });
-        setGems(res.gems);
-        setTotal(res.pagination.total);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load gems');
-      } finally {
-        setLoading(false);
-      }
+  const owners = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const g of gems) {
+      const email = g.owner.email.toLowerCase();
+      if (!set.has(email)) set.set(email, g.owner.displayName || email);
     }
-    load();
-  }, [q, owner, page]);
+    return Array.from(set.entries())
+      .map(([email, displayName]) => ({ email, displayName }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+  }, [gems]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const ownerNeedle = owner.trim().toLowerCase();
+    return gems.filter((g) => {
+      if (ownerNeedle && g.owner.email.toLowerCase() !== ownerNeedle) return false;
+      if (!needle) return true;
+      return (
+        g.name.toLowerCase().includes(needle) ||
+        (g.description || '').toLowerCase().includes(needle) ||
+        g.instructions.toLowerCase().includes(needle)
+      );
+    });
+  }, [gems, q, owner]);
+
+  const total = filtered.length;
+  const pageGems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -86,9 +83,9 @@ export default function Registry() {
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-schnucks-red focus:border-schnucks-red outline-none"
         >
           <option value="">All owners</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.email}>
-              {u.displayName || u.email}
+          {owners.map((u) => (
+            <option key={u.email} value={u.email}>
+              {u.displayName}
             </option>
           ))}
         </select>
@@ -100,13 +97,13 @@ export default function Registry() {
         </div>
       )}
 
-      {loading ? (
+      {loading && gems.length === 0 ? (
         <p className="text-center py-12 text-gray-500">Loading...</p>
-      ) : gems.length === 0 ? (
+      ) : pageGems.length === 0 ? (
         <EmptyState message="No gems match your search." />
       ) : (
         <>
-          <GemTable gems={gems} />
+          <GemTable gems={pageGems} />
           <Pagination
             page={page}
             limit={PAGE_SIZE}

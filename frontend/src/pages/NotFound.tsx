@@ -5,7 +5,7 @@ export default function NotFound() {
     <div className="flex flex-col items-center justify-center h-screen gap-4 text-gray-500">
       <h1 className="text-2xl font-bold">Page not found</h1>
       <Link to="/" className="text-blue-600 hover:text-blue-800">
-        Back to Dashboard
+        Back to Registry
       </Link>
     </div>
   );

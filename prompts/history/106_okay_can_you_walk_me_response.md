@@ -1,0 +1,3 @@
+# Response: 2026-05-14T09:46:53.283430
+
+The Google Auth Platform now has four sub pages: Branding, Audience, Data Access, and Clients. Set the audience to External with your Gmail as a test user, add the three scopes for devstorage read write, read only, and userinfo email, then on the Clients page create an OAuth client of type Chrome Extension with your thirty two character extension ID as the item ID. Copy the resulting client ID into both extension config dot js and extension manifest dot json, and then create a separate Web application client for the SPA with localhost three thousand as an authorized origin.

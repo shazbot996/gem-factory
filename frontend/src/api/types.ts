@@ -1,3 +1,7 @@
+// Shared types for gem documents loaded from GCS. The shape mirrors the
+// JSON we write at users/<email>/gems.json — with a few synthetic fields
+// (id, owner, importedAt, updatedAt) added by the gcsClient for the UI.
+
 export interface GemOwner {
   id: string;
   email: string;
@@ -28,52 +32,4 @@ export interface Gem {
   updatedAt: string;
   extractedAt: string | null;
   duplicateCluster: { id: string; gemCount: number } | null;
-}
-
-export interface GemListResponse {
-  gems: Gem[];
-  pagination: { page: number; limit: number; total: number };
-}
-
-export interface ImportResult {
-  imported: number;
-  updated: number;
-  skipped: number;
-  importedIds: string[];
-}
-
-export interface UserProfile {
-  id?: string;
-  email: string;
-  displayName: string;
-  isAdmin: boolean;
-  gemCount: number;
-  firstImportAt: string | null;
-  lastImportAt: string | null;
-}
-
-export interface UserListItem {
-  id: string;
-  email: string;
-  displayName: string;
-  gemCount: number;
-}
-
-export interface Stats {
-  totalGems: number;
-  uniqueGems: number;
-  totalUsers: number;
-  duplicateClusters: number;
-  topClusters: { id: string; representativeName: string; gemCount: number }[];
-}
-
-export interface ExtractedGem {
-  id: string;
-  name: string;
-  description: string;
-  instructions: string;
-  knowledgeFiles: KnowledgeFile[];
-  defaultTools: string[];
-  extractedAt: string;
-  source: string;
 }
