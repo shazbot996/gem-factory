@@ -1,7 +1,7 @@
-# Gem Factory — Claude Code Instructions
+# Gem Factory — Gemini CLI Instructions
 
 > **Shared entry point is [AGENTS.md](./AGENTS.md).** The equivalent
-> Gemini-framed file is [GEMINI.md](./GEMINI.md) — keep both in sync when
+> Claude-framed file is [CLAUDE.md](./CLAUDE.md) — keep both in sync when
 > editing project context.
 
 ## What this project is
@@ -22,7 +22,9 @@ rationale.
 
 ```
 gem-factory/
-  CLAUDE.md                 ← you are here
+  AGENTS.md                 ← shared entry point (routes to CLAUDE.md / GEMINI.md)
+  CLAUDE.md                 ← Claude Code instructions (equivalent of this file)
+  GEMINI.md                 ← you are here
   Makefile                  ← project-level commands (help, spa-dev, spa-build, voicecode)
   docs/
     context/ARCH.md         ← architecture (extension + SPA + GCS bucket)
@@ -78,7 +80,9 @@ gem-factory/
     icons/                  ← placeholder PNGs (blue diamond)
   media/                    ← media assets (source logo files, etc.)
   voicecode-bbs/            ← separate project — VoiceCode BBS (Python curses app)
+    AGENTS.md               ← its own shared entry point
     CLAUDE.md               ← its own Claude Code instructions
+    GEMINI.md               ← its own Gemini CLI instructions
   prompts/history/          ← prompt/response history from development sessions
 ```
 
@@ -224,8 +228,9 @@ The Makefile uses `SHELL := /bin/bash`.
 ## voicecode-bbs/
 
 A separate Python curses application that lives in this repo. It has its
-own `CLAUDE.md` — read that file if working on VoiceCode. From the
-gem-factory root, the only touchpoint is `make voicecode`.
+own `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` — read those if working on
+VoiceCode. From the gem-factory root, the only touchpoint is `make
+voicecode`.
 
 ## Conventions
 
@@ -239,3 +244,19 @@ gem-factory root, the only touchpoint is `make voicecode`.
 - Plans go in `docs/plans/`, specs in `docs/specs/`, architecture in
   `docs/context/`, decisions in `docs/decisions/`, runbooks in
   `docs/deployment/`.
+
+## Gemini-Specific Notes
+
+- This file (`GEMINI.md`) is what Gemini CLI loads as project context.
+  Its content mirrors `CLAUDE.md`; if you edit one, update the other so
+  both assistants see the same project state.
+- The Chrome extension lives in `extension/` and writes to GCS using
+  `chrome.identity` — the OAuth client ID **must match** between
+  `extension/config.js` and `extension/manifest.json` (Chrome reads the
+  manifest).
+- The SPA is read-only against GCS; there is no API server to start, no
+  database to seed. `make spa-dev` is all you need for the frontend.
+- When proposing edits, prefer in-place changes to existing files over
+  new file creation, and never invent an API server or database layer —
+  they were intentionally removed (see
+  `docs/decisions/0001-replace-sql-and-api-server-with-direct-gcs-writes.md`).
