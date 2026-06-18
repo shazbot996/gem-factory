@@ -12,11 +12,11 @@ their personal gems into a shared catalog for discovery, dedup, and
 promotion to Enterprise agents.
 
 The system is **client-only**: there is no application server and no
-relational database. Gem configurations live as JSON files in a Google
-Cloud Storage bucket (`users/<email>/gems.json`). Both clients — the Chrome
-extension that writes, and the SPA viewer that reads — talk to GCS directly
-using the signed-in user's Google credentials. See ADR-0001 for the
-rationale.
+relational database. Each gem lives as its own immutable JSON object at
+`users/<email>/gems/<gem-id>.json` in a Google Cloud Storage bucket. The
+Chrome extension writes new objects; the SPA reads them and (admin-only)
+deletes them. Both clients talk to GCS directly using the signed-in
+user's Google credentials. See ADR-0001 for the rationale.
 
 ## Project structure
 
@@ -34,7 +34,7 @@ gem-factory/
       gcs-bucket-setup.md   ← bucket configuration runbook
     plans/                  ← implementation plans
     specs/                  ← feature specifications
-  frontend/                 ← React SPA (TypeScript + Vite + Tailwind) — read-only viewer
+  frontend/                 ← React SPA (TypeScript + Vite + Tailwind) — admin list/view/delete tool
     index.html              ← entry HTML, loads Google Identity Services
     package.json            ← React 19, React Router 7.5, Tailwind 4.1, Vite 6.3
     vite.config.ts          ← port 3000, build → frontend/dist/
@@ -47,36 +47,35 @@ gem-factory/
       config.ts             ← env-derived bucketName + oauthClientId (single source of truth)
       index.css             ← Tailwind v4 import + Schnucks brand theme
       pages/
-        Registry.tsx        ← index route — full catalog with client-side search, owner filter, pagination
-        GemDetail.tsx       ← single gem view (lookup in the shared cache)
+        Registry.tsx        ← index route — flat list of every gem with reload + per-row delete
+        GemDetail.tsx       ← single gem view + "Delete from bucket" action
         NotFound.tsx        ← 404 page
       components/
         Layout.tsx          ← header: Schnucks logo + Gem Registry label + user profile
-        GemTable.tsx        ← compact gem table used by Registry
-        SearchBar.tsx       ← debounced search input (300ms)
-        Pagination.tsx      ← page controls with record range display
+        GemTable.tsx        ← compact gem table with delete column
         EmptyState.tsx      ← empty state message
       api/
-        gcsClient.ts        ← read-only GCS REST client (list + download + flatten)
-        types.ts            ← Gem, KnowledgeFile, GemOwner
+        gcsClient.ts        ← GCS REST client (list, download, delete; per-gem objects only)
+        types.ts            ← Gem (carries objectName for deletes), KnowledgeFile, GemOwner
       data/
-        GemsProvider.tsx    ← context that loads the catalog once and shares it
+        GemsProvider.tsx    ← context: loads the catalog once, exposes deleteGem(gem)
       auth/
-        AuthProvider.tsx    ← Google Sign-In + GIS Token Client for GCS reads
+        AuthProvider.tsx    ← Google Sign-In + GIS Token Client (devstorage.read_write)
         useAuth.ts          ← auth hook (user, idToken, accessToken, isAuthenticated, signOut, signInAsDev)
         GoogleSignIn.tsx    ← sign-in button component
         gis.d.ts            ← Google Identity Services type declarations
   extension/                ← Chrome extension (Manifest V3) — gem extractor + GCS writer
-    manifest.json           ← v0.12.0 — storage/identity/activeTab perms, oauth2 block, GCS host permission
+    manifest.json           ← v0.17.0 — storage/identity/activeTab perms, oauth2 block, GCS host permission
     config.js               ← single source of truth: bucketName + oauthClientId
-    background.js           ← service worker: local gem storage (no external messaging)
-    content-script.js       ← FAB + overlay on gem edit pages
+    banner-config.js        ← admin-editable public-Gemini alert banner (enable, color, message, link)
+    background.js           ← service worker: local "pending" gem storage (no external messaging)
+    content-script.js       ← FAB + extraction overlay + public-Gemini alert banner
     page-script.js          ← MAIN world script (reserved for future use)
-    gcs.js                  ← OAuth token + GCS REST (saveGem, create-only via ifGenerationMatch=0)
+    gcs.js                  ← OAuth token + GCS REST (saveGem create-only, listUserGems full fetch)
     popup.html              ← browser-action popup (extension toolbar icon)
-    popup.js                ← gem list + Save to Registry → direct GCS upload
-    styles.css              ← FAB, modal overlay, knowledge list styles
-    icons/                  ← placeholder PNGs (blue diamond)
+    popup.js                ← cloud-canonical popup: lists bucket gems + pending uploads; no Clear/delete
+    styles.css              ← FAB, extraction overlay, knowledge list, banner styles
+    icons/                  ← Schnucks logo PNG (FAB) + extension toolbar icons
   media/                    ← media assets (source logo files, etc.)
   voicecode-bbs/            ← separate project — VoiceCode BBS (Python curses app)
     AGENTS.md               ← its own shared entry point
@@ -118,9 +117,10 @@ Promoting from the test bucket (`gcs-gem-registry`) to a production bucket:
 
 ## Frontend SPA (`frontend/`)
 
-**Status:** built and working. Read-only viewer that aggregates every
-`users/<email>/gems.json` in the configured bucket into a single in-memory
-catalog.
+**Status:** built and working. **Admin-only** list/view/delete tool over
+the configured bucket. Aggregates every `users/<email>/gems/<gem-id>.json`
+object into a single in-memory catalog. Legacy `users/<email>/gems.json`
+files are ignored.
 
 **Run locally:**
 
@@ -133,8 +133,8 @@ catalog.
 
 | Path | Page | Description |
 |------|------|-------------|
-| `/` | Registry | Index route — all gems with client-side search, owner filter, pagination |
-| `/gems/:id` | GemDetail | Single gem detail (lookup in the shared cache) |
+| `/` | Registry | Flat list of every gem in the bucket with a per-row Delete + a Reload button |
+| `/gems/:id` | GemDetail | Single gem detail + "Delete from bucket" action |
 | `*` | NotFound | 404 page |
 
 The `Registry` and `GemDetail` routes are nested under a `ProtectedRoutes`
@@ -145,27 +145,43 @@ wrapper that redirects unauthenticated visitors to a sign-in page.
 - Google Sign-In via Google Identity Services (GIS) yields an ID token
   (identity proof).
 - A separate GIS Token Client mints an OAuth access token with
-  `devstorage.read_only` scope for GCS reads. Refreshes ~60 s before
-  expiry; on 401 from GCS, AuthProvider re-requests silently.
+  `devstorage.read_write` scope (needed for DELETE on bucket objects).
+  Refreshes ~60 s before expiry; on 401 from GCS, AuthProvider
+  re-requests silently. The OAuth consent screen for
+  `VITE_GOOGLE_CLIENT_ID` must list the `read_write` scope.
 - Dev bypass: when `VITE_GOOGLE_CLIENT_ID` is empty, the sign-in page
   exposes a **"Continue as dev user"** button that signs in as
   `dev@localhost`. The catalog will be empty unless you put a JSON file
   in the bucket manually (or use the extension to save one).
 
+**IAM (bucket side):** the signed-in user needs
+`storage.objects.delete` to use the SPA's delete action. The simplest
+grant is `roles/storage.objectUser` on the bucket (superset of
+`objectViewer` + `objectCreator`, plus `delete` and bucket metadata read).
+See `docs/deployment/gcs-bucket-setup.md`.
+
 **GCS client (`src/api/gcsClient.ts`):**
 
 - `setGcsAccessToken(token)` — called by AuthProvider when the access
   token rotates.
-- `listUserObjects(bucket)` — lists `users/<email>/gems.json` under the
-  bucket.
+- `listUserObjects(bucket)` — lists per-gem objects
+  (`users/<email>/gems/<gem-id>.json`) under the bucket.
 - `downloadObject(bucket, name)` — downloads a single document.
+- `deleteObject(bucket, name)` — DELETE a single object (treats 404 as
+  success).
 - `loadAllGems(bucket)` — list + download + flatten into a `Gem[]` for
-  the UI.
+  the UI; each `Gem` carries its source `objectName` so deletes know
+  which object to target.
 
 ## Chrome extension (`extension/`)
 
-**Status:** built and working. v0.12.0 — writes directly to GCS using
-`chrome.identity` for OAuth.
+**Status:** built and working. v0.17.0 — bucket-as-source-of-truth model.
+The popup fetches `users/<email>/gems/*.json` from GCS and renders that
+as the canonical list ("In cloud"). Newly extracted gems sit in
+`chrome.storage.local` as "Pending upload" until the user clicks
+**Upload N pending**, which calls GCS create-only (`ifGenerationMatch=0`)
+and on success removes the local copy. There is **no Clear button and no
+delete from the extension** — the SPA owns deletes.
 
 **To test:**
 
@@ -178,10 +194,17 @@ wrapper that redirects unauthenticated visitors to a sign-in page.
 3. Go to `chrome://extensions`, enable Developer Mode, click
    "Load unpacked", select `extension/`.
 4. Navigate to a gem edit page on `gemini.google.com`, click the FAB,
-   then open the popup and click **Save to Registry**.
-5. First save shows the Google consent dialog (for
+   then open the popup and click **Upload N pending**.
+5. First upload shows the Google consent dialog (for
    `devstorage.read_write` + `userinfo.email`).
-6. Verify with `gcloud storage cat gs://gcs-gem-registry/users/<your-email>/gems.json`.
+6. Verify with `gcloud storage ls gs://gcs-gem-registry/users/<your-email>/gems/`.
+
+**Public-Gemini alert banner (`banner-config.js`):** the content script
+injects a fixed top banner on every `gemini.google.com` page nudging
+corporate users to the private Gemini Enterprise instance.
+Admin-editable fields: `enabled`, `backgroundColor`, `textColor`,
+`message`, `linkLabel`, `enterpriseUrl`. Set `enabled: false` to hide
+without removing the file.
 
 **Key conventions:**
 
@@ -211,10 +234,14 @@ queries the extension.
 - **Test:** `gs://gcs-gem-registry` (the user's existing bucket).
 - **Production:** TBD — configure per `docs/deployment/gcs-bucket-setup.md`.
 - Object layout: `users/<email-lowercased>/gems/<gem-id>.json`, one
-  immutable file per gem (legacy files at `users/<email>/gems.json` are
-  still read by the SPA but no longer written). Writes use
-  `ifGenerationMatch=0` so the extension never overwrites or deletes —
-  re-saving an existing gem is reported as "already in registry".
+  immutable file per gem. Any legacy `users/<email>/gems.json` files left
+  in the bucket are ignored by both clients — remove them with
+  `gcloud storage rm` once the data is no longer needed.
+- Writes use `ifGenerationMatch=0` (create-only): the extension never
+  overwrites or deletes; re-uploading an already-existing gem is treated
+  as "already in cloud" and the local pending copy is cleaned up.
+- Deletes come from the **SPA only** (admin tool), via the GCS REST
+  `DELETE` endpoint.
 - The bucket uses Uniform Bucket-Level Access + object versioning + CORS
   for browser origins.
 - See `docs/deployment/gcs-bucket-setup.md` for the full setup checklist
@@ -240,12 +267,13 @@ voicecode`.
 
 ## Conventions
 
-- The SPA frontend is built and functional (`frontend/`) — read-only
-  viewer against GCS.
-- The Chrome extension is built and functional (`extension/`) — writes
-  directly to GCS.
+- The SPA frontend (`frontend/`) is built and functional — an admin-only
+  list/view/delete tool against GCS.
+- The Chrome extension (`extension/`) is built and functional — uploads
+  new gems to GCS and treats the bucket as the source of truth.
 - There is no API server or database to run; the previous Express +
-  Postgres tiers were retired in the GCS rewrite (see ADR-0001).
+  Postgres tiers were retired in the GCS rewrite (see ADR-0001). When
+  proposing edits, never reintroduce a server tier.
 - Docs follow a type/frontmatter convention: `type: arch|spec|plan|adr|runbook`.
 - Plans go in `docs/plans/`, specs in `docs/specs/`, architecture in
   `docs/context/`, decisions in `docs/decisions/`, runbooks in

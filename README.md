@@ -2,12 +2,14 @@
 type: readme
 title: "Gem Factory"
 scope: Project overview — central registry for Google Gemini gem configurations, branded as the Schnucks Gem Registry
-date: 2026-05-14
+date: 2026-06-18
 ---
 
 # Gem Factory
 
 **A central registry for Google Gemini gem configurations — branded as the Schnucks Gem Registry.**
+
+**Also a good way to help redirect users to Gemini Enterprise! (Boy they sure do look identical, don't they?)**
 
 ## Overview
 
@@ -20,42 +22,44 @@ The long-term goal is to use that central catalog as the seed corpus for **Gemin
 ## How it works
 
 ```
-  gemini.google.com           Google Cloud Storage      Gemini Enterprise
-  ┌──────────────┐    extract  ┌──────────────┐  seed  ┌──────────────┐
-  │  User's gem  │  ────────▶  │  Schnucks    │  ───▶  │  Governed    │
-  │  (personal)  │   Chrome    │  Gem Registry│        │  enterprise  │
-  └──────────────┘  extension  │  (gems.json) │        │  agents      │
-                               └──────┬───────┘        └──────────────┘
-                                      │ read-only
-                                      ▼
-                               ┌──────────────┐
-                               │   Schnucks   │
-                               │  Registry SPA│
-                               └──────────────┘
+  gemini.google.com           Google Cloud Storage         Gemini Enterprise
+  ┌──────────────┐    extract  ┌──────────────────┐  seed  ┌──────────────┐
+  │  User's gem  │  ────────>  │    Schnucks      │  ───>  │  Governed    │
+  │  (personal)  │   Chrome    │  Gem Registry    │        │  enterprise  │
+  └──────────────┘  extension  │  (per-gem JSON)  │        │  agents      │
+                               └────────┬─────────┘        └──────────────┘
+                                        │ list + delete
+                                        ▼
+                                 ┌──────────────┐
+                                 │   Schnucks   │
+                                 │  Registry SPA│
+                                 │  (admin tool)│
+                                 └──────────────┘
 ```
 
-1. **Extract.** A user opens one of their gems on `gemini.google.com`, clicks the extension's floating action button, and the gem's full instructions, knowledge documents, and enabled tools are captured into the extension's local storage.
-2. **Save.** From the extension popup, the user clicks **Save to Registry**. The extension obtains an OAuth token via `chrome.identity`, merges the new gems into `users/<email>/gems.json` in the configured GCS bucket, and writes it back with `If-Match` for optimistic concurrency.
-3. **Browse.** An administrator signs into the Schnucks Gem Registry SPA, which lists every `users/<email>/gems.json` in the bucket and flattens them into a single catalog — searchable and filterable by owner.
+1. **Extract.** A user opens one of their gems on `gemini.google.com`, clicks the extension's floating action button, and the gem's full instructions, knowledge documents, and enabled tools are captured into the extension's local storage as a **pending** upload.
+2. **Upload.** From the extension popup, the user clicks **Upload N pending**. The extension obtains an OAuth token via `chrome.identity` and uploads each gem as its own immutable object at `users/<email>/gems/<gem-id>.json` using create-only semantics (`ifGenerationMatch=0`). On success the local pending copy is removed; subsequent popups show the bucket as the canonical list.
+3. **Browse.** An administrator signs into the Schnucks Gem Registry SPA, which lists every `users/<email>/gems/<gem-id>.json` in the bucket as a flat catalog. The admin can view each gem and delete individual entries from the bucket.
 4. **Promote.** Over time, the organization uses the registry to decide which agents deserve to be rebuilt in Gemini Enterprise with proper governance, data controls, and scaling.
 
 ## Features
 
 - **Chrome extension (Manifest V3)** that extracts Gemini gem configurations directly from the edit page DOM — full instructions, descriptions, knowledge file metadata, Drive URLs, and enabled tools.
 - **Silent Drive link capture** for knowledge documents, so the registry records not just file names but the actual Drive URLs users can follow.
-- **Direct-to-GCS writes** from the extension using each user's own OAuth credentials — no application server, no relational database. One JSON document per user (`users/<email>/gems.json`) with `If-Match` etag-based optimistic concurrency on overwrite.
-- **React SPA viewer** with a single Registry page: every gem in the bucket, debounced client-side search across name/description/instructions, owner filter, and 50-per-page pagination.
-- **Schnucks branding** — logo, red color theme, and "Schnucks Gem Registry" identity applied throughout the SPA.
-- **Local-first workflow** — gems live in the extension's local storage until the user explicitly clicks **Save to Registry**, so nothing leaves the browser unintentionally.
+- **Direct-to-GCS writes** from the extension using each user's own OAuth credentials — no application server, no relational database. One immutable JSON object per gem at `users/<email>/gems/<gem-id>.json`, written create-only (`ifGenerationMatch=0`); the extension never overwrites or deletes.
+- **Bucket-as-source-of-truth popup** — the extension popup lists what's actually in the bucket ("In cloud") and shows newly extracted gems as "Pending upload" until they're synced. Local copies are removed automatically once a gem is in GCS.
+- **Public-Gemini alert banner** — a configurable top banner injected on every `gemini.google.com` page that redirects corporate users to their private Gemini Enterprise instance. Admin-editable from `extension/banner-config.js` (`enabled`, color, message, link).
+- **React SPA admin tool** — a flat list of every gem in the bucket, per-gem detail view, and a per-row Delete that removes the underlying GCS object.
+- **Schnucks branding** — logo, red color theme, and "Schnucks Gem Registry" identity applied throughout the SPA (and the extension FAB).
 
 ## Getting started
 
 ### Prerequisites
 
-- A Google Cloud project with a GCS bucket configured per [`docs/deployment/gcs-bucket-setup.md`](docs/deployment/gcs-bucket-setup.md) — UBLA, object versioning, CORS, and the IAM bindings authorized users need.
+- A Google Cloud project with a GCS bucket configured per [`docs/deployment/gcs-bucket-setup.md`](docs/deployment/gcs-bucket-setup.md) — UBLA, object versioning, CORS, and the IAM bindings authorized users need. Admins who will delete from the SPA need `storage.objects.delete` on the bucket (the simplest grant is `roles/storage.objectUser`).
 - A Google OAuth client ID for each side that needs one:
-  - A **Chrome-Extension**-type client (bound to the extension's ID) for the extension.
-  - A **Web application**-type client (with `http://localhost:3000` as an authorized origin) for the SPA.
+  - A **Chrome-Extension**-type client (bound to the extension's ID) for the extension. Its consent screen must include `https://www.googleapis.com/auth/devstorage.read_write` and `userinfo.email`.
+  - A **Web application**-type client (with `http://localhost:3000` as an authorized origin) for the SPA. Its consent screen must include `https://www.googleapis.com/auth/devstorage.read_write` — the SPA's admin Delete action needs write access.
 - Node.js 20+ and npm (for the SPA).
 - Chrome or a Chromium-based browser (for the extension).
 
@@ -77,7 +81,7 @@ make spa-install  # First time only — installs npm dependencies
 make spa-dev      # Starts the Vite dev server on port 3000
 ```
 
-Visit `http://localhost:3000`. Sign in with Google and the SPA will load every `users/<email>/gems.json` it can read from the configured bucket.
+Visit `http://localhost:3000`. Sign in with Google and the SPA will load every `users/<email>/gems/<gem-id>.json` it can read from the configured bucket.
 
 For a production build:
 
@@ -92,32 +96,34 @@ The bucket name and Chrome-Extension OAuth client ID live in **two** files that 
 - `extension/config.js` — `bucketName` + `oauthClientId`
 - `extension/manifest.json` — `oauth2.client_id`
 
+The public-Gemini alert banner is configured separately in `extension/banner-config.js` (set `enabled: false` there to hide it without removing the file).
+
 Then:
 
 1. Go to `chrome://extensions` and enable **Developer mode**.
 2. Click **Load unpacked** and select the `extension/` directory.
-3. Open a gem on `gemini.google.com/gems/edit/*` — a floating gem button appears bottom-right.
+3. Open a gem on `gemini.google.com/gems/edit/*` — a floating Schnucks-logo button appears bottom-right.
 
 ## Usage
 
 **Extracting gems:**
 
 1. Open any of your gems for editing on `gemini.google.com`.
-2. Click the floating gem button that appears in the bottom-right corner.
+2. Click the floating Schnucks-logo button that appears in the bottom-right corner.
 3. An overlay confirms the gem was captured and shows an instructions preview.
 4. (Optional) Click **Capture All Links** to silently grab Drive URLs for each knowledge document attached to the gem.
 5. Repeat for each gem you want to add to the registry.
 
-**Saving to the registry:**
+**Uploading to the registry:**
 
-1. Click the extension's toolbar icon to open the popup. Pending gems are listed with the target bucket shown in the header strip.
-2. Click **Save to Registry**. On first use, Chrome shows the Google consent screen for the `devstorage.read_write` and `userinfo.email` scopes.
-3. The extension reads your existing `users/<email>/gems.json` (or starts an empty one), merges the new gems by id, and writes the document back. The popup reports the number saved.
+1. Click the extension's toolbar icon to open the popup. The popup shows gems already in the bucket ("In cloud") and any newly extracted gems waiting to be uploaded ("Pending upload"). The target bucket is shown in the header strip.
+2. Click **Upload N pending**. On first use, Chrome shows the Google consent screen for the `devstorage.read_write` and `userinfo.email` scopes.
+3. Each pending gem is uploaded to its own per-gem object. On a successful upload — or on a `412 Precondition Failed` indicating the gem is already in the cloud — the local pending copy is removed. The popup reports the number uploaded versus already-in-cloud.
 
 **Browsing the registry:**
 
-- **Registry (`/`)** — Every gem in the bucket with debounced search across name, description, and instructions; an owner dropdown; and 50-per-page pagination.
-- **Gem detail (`/gems/:id`)** — Full instructions (with a Copy button), knowledge documents linked back to Drive, and the enabled-tools list.
+- **Registry (`/`)** — Flat list of every gem in the bucket with a per-row **Delete** button and a top-level **Reload**.
+- **Gem detail (`/gems/:id`)** — Full instructions (with a Copy button), knowledge documents linked back to Drive, the enabled-tools list, and a **Delete from bucket** action.
 
 ## Architecture
 
@@ -125,14 +131,14 @@ The repo contains two cooperating clients of a shared GCS bucket — no applicat
 
 | Path | What it is |
 |------|------------|
-| `extension/` | Manifest V3 Chrome extension — DOM extraction on gem edit pages, Drive link capture, direct GCS writes via `chrome.identity` |
-| `frontend/` | React 19 + TypeScript + Vite 6 + Tailwind v4 SPA — read-only viewer over the bucket, Schnucks branded |
+| `extension/` | Manifest V3 Chrome extension — DOM extraction on gem edit pages, Drive link capture, direct GCS writes via `chrome.identity`, public-Gemini alert banner |
+| `frontend/` | React 19 + TypeScript + Vite 6 + Tailwind v4 SPA — admin list/view/delete tool over the bucket, Schnucks branded |
 | `docs/context/ARCH.md` | Full system architecture, data flows, document schema |
 | `docs/decisions/` | Architecture decision records (ADR-0001 explains the SQL → GCS rewrite) |
 | `docs/deployment/gcs-bucket-setup.md` | Bucket configuration runbook (UBLA, versioning, CORS, IAM) |
 | `docs/specs/` | Detailed specs for the extension, SPA, auth, and the future Gemini Enterprise publisher |
 | `docs/plans/` | Implementation plans for each component |
-| `CLAUDE.md` | Orientation document for AI coding agents |
+| `AGENTS.md` | Shared entry point for AI coding agents; routes to `CLAUDE.md` and `GEMINI.md` |
 
 Run `make help` to see all available Makefile targets.
 
@@ -140,9 +146,9 @@ Run `make help` to see all available Makefile targets.
 
 Built and working:
 
-- Chrome extension (v0.12.0) with DOM extraction, Drive link capture, and direct-to-GCS writes with etag-based optimistic concurrency
-- React SPA viewer with Google Sign-In, GCS list/download, client-side search, owner filter, and pagination
-- Schnucks branding across the SPA
+- Chrome extension (v0.17.0) with DOM extraction, Drive link capture, direct create-only GCS writes, a cloud-canonical popup that tracks pending vs synced gems, and the public-Gemini alert banner
+- React SPA admin tool with Google Sign-In, GCS list/download, per-gem detail view, and bucket Delete
+- Schnucks branding across the SPA and the extension FAB
 
 Deferred to later phases:
 
@@ -153,4 +159,4 @@ Deferred to later phases:
 
 ## Contributing
 
-This is an internal tool. The codebase includes detailed context documents in `docs/` and a project-level `CLAUDE.md` for anyone (human or AI) onboarding onto the project. Start with `docs/context/ARCH.md` for the big picture, then `docs/decisions/0001-replace-sql-and-api-server-with-direct-gcs-writes.md` for why the current shape exists, and the relevant spec under `docs/specs/` for the component you're working on.
+This is an internal tool. The codebase includes detailed context documents in `docs/` and a project-level `AGENTS.md` (with per-assistant `CLAUDE.md` and `GEMINI.md` siblings) for anyone (human or AI) onboarding onto the project. Start with `docs/context/ARCH.md` for the big picture, then `docs/decisions/0001-replace-sql-and-api-server-with-direct-gcs-writes.md` for why the current shape exists, and the relevant spec under `docs/specs/` for the component you're working on.

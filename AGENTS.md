@@ -22,16 +22,18 @@ sync with `GEMINI.md`.
 Gem Factory is the **Schnucks Gem Registry** — a client-only catalog of
 Google Gemini gem configurations for Schnucks Markets. There is no
 application server and no database; gems live as JSON in a Google Cloud
-Storage bucket (`users/<email>/gems.json`) and both clients talk to GCS
-directly using the signed-in user's Google credentials.
+Storage bucket (one immutable object per gem at
+`users/<email>/gems/<gem-id>.json`) and both clients talk to GCS directly
+using the signed-in user's Google credentials.
 
 Two clients:
 
-- **`frontend/`** — React 19 + Vite + Tailwind SPA. Read-only viewer that
-  aggregates every user's `gems.json` into a single in-memory catalog.
+- **`frontend/`** — React 19 + Vite + Tailwind SPA. Admin-only browser
+  that lists, views, and deletes per-gem objects in the bucket.
 - **`extension/`** — Chrome extension (Manifest V3) that extracts gems
-  from `gemini.google.com` edit pages and writes them straight to GCS via
-  `chrome.identity`.
+  from `gemini.google.com` edit pages and uploads them to GCS via
+  `chrome.identity`. The popup treats the bucket as the source of truth
+  and shows local extractions as "pending upload" until they're synced.
 
 See [CLAUDE.md](./CLAUDE.md) or [GEMINI.md](./GEMINI.md) for the full
 project structure, configuration model, run instructions, and conventions.
