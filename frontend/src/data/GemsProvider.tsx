@@ -1,6 +1,7 @@
-// Loads every users/<email>/gems.json from the configured GCS bucket once
-// per session and shares the flattened gem list with all pages. Pages can
-// call useAllGems() to consume the cached data or trigger a manual reload.
+// Loads every users/<email>/... gem document from the configured GCS
+// bucket once per session and shares the flattened gem list with all
+// pages. Pages can call useAllGems() to consume the cached data, trigger
+// a manual reload, or delete a gem from the bucket.
 
 import {
   createContext,
@@ -12,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { loadAllGems } from '../api/gcsClient';
+import { deleteObject, loadAllGems } from '../api/gcsClient';
 import { config } from '../config';
 import { useAuth } from '../auth/useAuth';
 import type { Gem } from '../api/types';
@@ -22,6 +23,7 @@ interface GemsContextValue {
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
+  deleteGem: (gem: Gem) => Promise<void>;
 }
 
 const GemsContext = createContext<GemsContextValue | null>(null);
@@ -47,6 +49,11 @@ export function GemsProvider({ children }: { children: ReactNode }) {
     }
   }, [accessToken]);
 
+  const deleteGem = useCallback(async (gem: Gem) => {
+    await deleteObject(config.bucketName, gem.objectName);
+    setGems((prev) => prev.filter((g) => g.id !== gem.id));
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) {
       setGems([]);
@@ -60,8 +67,8 @@ export function GemsProvider({ children }: { children: ReactNode }) {
   }, [accessToken, isAuthenticated, reload]);
 
   const value = useMemo(
-    () => ({ gems, loading, error, reload }),
-    [gems, loading, error, reload],
+    () => ({ gems, loading, error, reload, deleteGem }),
+    [gems, loading, error, reload, deleteGem],
   );
 
   return <GemsContext.Provider value={value}>{children}</GemsContext.Provider>;

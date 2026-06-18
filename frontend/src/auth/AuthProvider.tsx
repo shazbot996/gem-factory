@@ -33,7 +33,9 @@ export interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | null>(null as AuthContextType | null);
 
-const GCS_SCOPE = 'https://www.googleapis.com/auth/devstorage.read_only';
+// Admin-only registry: needs DELETE on the bucket, which requires read_write.
+// The OAuth consent screen for VITE_GOOGLE_CLIENT_ID must include this scope.
+const GCS_SCOPE = 'https://www.googleapis.com/auth/devstorage.read_write';
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const base64 = token.split('.')[1];

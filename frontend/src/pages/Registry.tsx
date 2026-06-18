@@ -1,94 +1,47 @@
-import { useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
 import { useAllGems } from '../data/GemsProvider';
 import GemTable from '../components/GemTable';
-import SearchBar from '../components/SearchBar';
-import Pagination from '../components/Pagination';
 import EmptyState from '../components/EmptyState';
-
-const PAGE_SIZE = 50;
+import type { Gem } from '../api/types';
 
 export default function Registry() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const q = searchParams.get('q') || '';
-  const owner = searchParams.get('owner') || '';
-  const page = Number(searchParams.get('page')) || 1;
+  const { gems, loading, error, deleteGem, reload } = useAllGems();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const { gems, loading, error } = useAllGems();
+  async function handleDelete(gem: Gem) {
+    const ok = window.confirm(
+      `Delete "${gem.name}" from the bucket?\n\nThis removes ${gem.objectName} from ${gem.owner.email}. The Chrome extension still holds a local copy and can re-save it.`,
+    );
+    if (!ok) return;
 
-  const owners = useMemo(() => {
-    const set = new Map<string, string>();
-    for (const g of gems) {
-      const email = g.owner.email.toLowerCase();
-      if (!set.has(email)) set.set(email, g.owner.displayName || email);
+    setDeletingId(gem.id);
+    setActionError(null);
+    try {
+      await deleteGem(gem);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeletingId(null);
     }
-    return Array.from(set.entries())
-      .map(([email, displayName]) => ({ email, displayName }))
-      .sort((a, b) => a.email.localeCompare(b.email));
-  }, [gems]);
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const ownerNeedle = owner.trim().toLowerCase();
-    return gems.filter((g) => {
-      if (ownerNeedle && g.owner.email.toLowerCase() !== ownerNeedle) return false;
-      if (!needle) return true;
-      return (
-        g.name.toLowerCase().includes(needle) ||
-        (g.description || '').toLowerCase().includes(needle) ||
-        g.instructions.toLowerCase().includes(needle)
-      );
-    });
-  }, [gems, q, owner]);
-
-  const total = filtered.length;
-  const pageGems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
-
-  const updateParams = useCallback(
-    (updates: Record<string, string>) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [key, value] of Object.entries(updates)) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        return next;
-      });
-    },
-    [setSearchParams],
-  );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Gem Registry</h1>
-        {!loading && (
-          <span className="text-sm text-gray-500">{total} gem{total !== 1 ? 's' : ''}</span>
-        )}
-      </div>
-
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <SearchBar
-            value={q}
-            onChange={(v) => updateParams({ q: v, page: '' })}
-          />
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {gems.length} gem{gems.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={reload}
+            disabled={loading}
+            className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          >
+            {loading ? 'Reloading…' : 'Reload'}
+          </button>
         </div>
-        <select
-          value={owner}
-          onChange={(e) => updateParams({ owner: e.target.value, page: '' })}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-schnucks-red focus:border-schnucks-red outline-none"
-        >
-          <option value="">All owners</option>
-          {owners.map((u) => (
-            <option key={u.email} value={u.email}>
-              {u.displayName}
-            </option>
-          ))}
-        </select>
       </div>
 
       {error && (
@@ -97,20 +50,22 @@ export default function Registry() {
         </div>
       )}
 
+      {actionError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+          {actionError}
+        </div>
+      )}
+
       {loading && gems.length === 0 ? (
         <p className="text-center py-12 text-gray-500">Loading...</p>
-      ) : pageGems.length === 0 ? (
-        <EmptyState message="No gems match your search." />
+      ) : gems.length === 0 ? (
+        <EmptyState message="No gems in the bucket." />
       ) : (
-        <>
-          <GemTable gems={pageGems} />
-          <Pagination
-            page={page}
-            limit={PAGE_SIZE}
-            total={total}
-            onPageChange={(p) => updateParams({ page: String(p) })}
-          />
-        </>
+        <GemTable
+          gems={gems}
+          onDelete={handleDelete}
+          deletingId={deletingId}
+        />
       )}
     </div>
   );

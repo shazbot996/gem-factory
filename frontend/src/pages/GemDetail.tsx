@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAllGems } from '../data/GemsProvider';
 
 export default function GemDetail() {
   const { id } = useParams<{ id: string }>();
-  const { gems, loading } = useAllGems();
+  const navigate = useNavigate();
+  const { gems, loading, deleteGem } = useAllGems();
   const [copied, setCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const gem = id ? gems.find((g) => g.id === id) : undefined;
 
@@ -14,6 +17,24 @@ export default function GemDetail() {
     await navigator.clipboard.writeText(gem.instructions);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleDelete() {
+    if (!gem) return;
+    const ok = window.confirm(
+      `Delete "${gem.name}" from the bucket?\n\nThis removes ${gem.objectName}. The Chrome extension still holds a local copy and can re-save it.`,
+    );
+    if (!ok) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteGem(gem);
+      navigate('/');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed');
+      setDeleting(false);
+    }
   }
 
   if (loading && !gem) {
@@ -42,14 +63,28 @@ export default function GemDetail() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex items-center justify-between">
         <Link
           to="/"
           className="text-sm text-schnucks-red hover:text-schnucks-red-dark"
         >
           &larr; Back
         </Link>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          title="Delete this gem from the bucket"
+          className="text-sm text-red-600 hover:text-red-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+        >
+          {deleting ? 'Deleting…' : 'Delete from bucket'}
+        </button>
       </div>
+
+      {deleteError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+          {deleteError}
+        </div>
+      )}
 
       <div>
         <div className="flex items-start justify-between gap-4">
@@ -65,7 +100,7 @@ export default function GemDetail() {
 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
           <span>{gem.owner.displayName || gem.owner.email}</span>
-          <span>Imported {new Date(gem.importedAt).toLocaleDateString()}</span>
+          <span>Updated {new Date(gem.updatedAt).toLocaleDateString()}</span>
           {gem.extractedAt && (
             <span>
               Extracted{' '}

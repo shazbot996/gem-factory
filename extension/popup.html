@@ -68,13 +68,17 @@
       border-bottom: none;
     }
 
-    .gem-item.registered {
+    .gem-item.synced {
       background: #f8fbff;
     }
 
-    .gem-item.registered .gem-preview,
-    .gem-item.registered .gem-meta {
+    .gem-item.synced .gem-preview,
+    .gem-item.synced .gem-meta {
       opacity: 0.75;
+    }
+
+    .gem-item.pending {
+      background: #fffaf0;
     }
 
     .gem-info {
@@ -95,15 +99,24 @@
       margin-top: 3px;
     }
 
-    .badge-registered {
+    .badge-cloud,
+    .badge-pending {
       display: inline-block;
       padding: 1px 7px;
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.2px;
+      border-radius: 10px;
+    }
+
+    .badge-cloud {
       background: #e8f0fe;
       color: #1967d2;
-      border-radius: 10px;
+    }
+
+    .badge-pending {
+      background: #fef0c7;
+      color: #92400e;
     }
 
     .gem-meta {
@@ -121,30 +134,6 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
       line-height: 1.4;
-    }
-
-    .gem-delete {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #9aa0a6;
-      padding: 4px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.1s, color 0.1s;
-    }
-
-    .gem-delete:hover {
-      background: #fce8e6;
-      color: #d93025;
-    }
-
-    .gem-delete svg {
-      width: 14px;
-      height: 14px;
     }
 
     .footer {
@@ -166,15 +155,6 @@
       border: none;
       cursor: pointer;
       transition: background 0.1s;
-    }
-
-    .btn-clear {
-      background: #f1f3f4;
-      color: #3c4043;
-    }
-
-    .btn-clear:hover {
-      background: #e8eaed;
     }
 
     .btn-export {

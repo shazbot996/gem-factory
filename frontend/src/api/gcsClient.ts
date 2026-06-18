@@ -1,11 +1,16 @@
-// Read-only Google Cloud Storage client for the SPA. The SPA loads every
-// per-gem object at users/<email>/gems/<id>.json (plus any legacy
-// users/<email>/gems.json files from before the per-gem rewrite) and
-// aggregates them for the registry view.
+// Read + delete Google Cloud Storage client for the SPA. The SPA loads
+// every per-gem object at users/<email>/gems/<id>.json and aggregates
+// them for the registry view.
 //
-// Auth: an OAuth access token (devstorage.read_only scope) is set by
-// AuthProvider after the GIS Token Client returns. The SPA NEVER writes —
-// only the Chrome extension writes.
+// Pre-rewrite (cf1752a) extensions wrote a consolidated
+// users/<email>/gems.json file. That format is no longer read by the SPA
+// — any such files sitting in the bucket are ignored. Use `gcloud storage
+// cat` / `rm` to inspect or remove them by hand.
+//
+// Auth: an OAuth access token (devstorage.read_write scope) is set by
+// AuthProvider after the GIS Token Client returns. The SPA never writes
+// new gems — only the Chrome extension does — but it can DELETE existing
+// per-gem objects in admin mode.
 
 import type { Gem, GemOwner } from './types';
 
@@ -56,29 +61,29 @@ interface UserGemsDocument {
   }>;
 }
 
-async function gcsFetch(url: string): Promise<Response> {
+async function gcsFetch(url: string, init?: RequestInit): Promise<Response> {
   if (!currentAccessToken) {
     throw new GcsError(401, 'No GCS access token available — sign in first.');
   }
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${currentAccessToken}` },
-  });
+  const headers = new Headers(init?.headers);
+  headers.set('Authorization', `Bearer ${currentAccessToken}`);
+  const res = await fetch(url, { ...init, headers });
 
   if (res.status === 401 && onTokenInvalid) {
     const fresh = await onTokenInvalid();
     if (fresh) {
       currentAccessToken = fresh;
-      return fetch(url, {
-        headers: { Authorization: `Bearer ${fresh}` },
-      });
+      const retryHeaders = new Headers(init?.headers);
+      retryHeaders.set('Authorization', `Bearer ${fresh}`);
+      return fetch(url, { ...init, headers: retryHeaders });
     }
   }
   return res;
 }
 
-// Matches either the legacy users/<email>/gems.json file or the new
-// per-gem users/<email>/gems/<id>.json objects.
-const LEGACY_DOC = /^users\/[^/]+\/gems\.json$/;
+// Matches the per-gem users/<email>/gems/<id>.json objects. Any other
+// path under users/ (including the legacy users/<email>/gems.json file)
+// is ignored by the SPA.
 const PER_GEM_DOC = /^users\/[^/]+\/gems\/[^/]+\.json$/;
 
 export async function listUserObjects(bucket: string): Promise<string[]> {
@@ -97,7 +102,7 @@ export async function listUserObjects(bucket: string): Promise<string[]> {
     const data = (await res.json()) as GcsObjectListResponse;
     if (data.items) {
       for (const item of data.items) {
-        if (LEGACY_DOC.test(item.name) || PER_GEM_DOC.test(item.name)) {
+        if (PER_GEM_DOC.test(item.name)) {
           names.push(item.name);
         }
       }
@@ -119,9 +124,18 @@ export async function downloadObject(bucket: string, name: string): Promise<User
   return (await res.json()) as UserGemsDocument;
 }
 
+export async function deleteObject(bucket: string, name: string): Promise<void> {
+  const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(name)}`;
+  const res = await gcsFetch(url, { method: 'DELETE' });
+  if (res.status === 404) return; // already gone — treat as success
+  if (!res.ok) {
+    const body = await res.text();
+    throw new GcsError(res.status, `Failed to delete ${name}: ${res.status} ${body}`);
+  }
+}
+
 function ownerEmailFromPath(name: string): string {
-  // Matches both "users/<encoded-email>/gems.json" (legacy) and
-  // "users/<encoded-email>/gems/<id>.json" (per-gem).
+  // Matches "users/<encoded-email>/gems/<id>.json".
   const match = name.match(/^users\/([^/]+)\//);
   if (!match) return '';
   try {
@@ -131,19 +145,20 @@ function ownerEmailFromPath(name: string): string {
   }
 }
 
-// Flatten a list of per-user documents into a Gem[] compatible with the
-// existing UI components (which were written against the old Postgres API
-// shape).
+// Flatten every per-gem document into a Gem[] for the UI. Each Gem
+// carries the GCS object name it came from so the registry can DELETE
+// the underlying object on demand.
 export async function loadAllGems(bucket: string): Promise<Gem[]> {
   const objectNames = await listUserObjects(bucket);
-  const documents = await Promise.all(objectNames.map((name) => downloadObject(bucket, name).then((doc) => ({ name, doc }))));
+  const documents = await Promise.all(
+    objectNames.map((name) => downloadObject(bucket, name).then((doc) => ({ name, doc }))),
+  );
 
   const flattened: Gem[] = [];
   for (const { name, doc } of documents) {
     if (!doc || !Array.isArray(doc.gems)) continue;
     const ownerEmail = (doc.owner || ownerEmailFromPath(name)).toLowerCase();
     const owner: GemOwner = {
-      id: ownerEmail,
       email: ownerEmail,
       displayName: ownerEmail,
     };
@@ -151,13 +166,11 @@ export async function loadAllGems(bucket: string): Promise<Gem[]> {
     for (const g of doc.gems) {
       flattened.push({
         id: `${ownerEmail}/${g.id}`,
+        objectName: name,
         name: g.name,
         description: g.description || null,
         instructions: g.instructions,
-        icon: null,
         source: g.source || 'edit_page',
-        status: 'imported',
-        geminiId: g.id,
         knowledgeFiles: (g.knowledgeFiles || []).map((k) => ({
           name: k.name,
           type: k.type || '',
@@ -167,10 +180,8 @@ export async function loadAllGems(bucket: string): Promise<Gem[]> {
         })),
         defaultTools: g.defaultTools || [],
         owner,
-        importedAt: updatedAt,
         updatedAt,
         extractedAt: g.extractedAt || null,
-        duplicateCluster: null,
       });
     }
   }

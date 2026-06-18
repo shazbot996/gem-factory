@@ -1,9 +1,9 @@
-// Shared types for gem documents loaded from GCS. The shape mirrors the
-// JSON we write at users/<email>/gems.json — with a few synthetic fields
-// (id, owner, importedAt, updatedAt) added by the gcsClient for the UI.
+// Gem documents loaded from GCS. The shape mirrors the JSON written by
+// the Chrome extension at users/<email>/gems/<id>.json, with a few
+// synthetic fields (id, owner, objectName, deletable, updatedAt) added by
+// the gcsClient for the UI.
 
 export interface GemOwner {
-  id: string;
   email: string;
   displayName: string;
 }
@@ -17,19 +17,18 @@ export interface KnowledgeFile {
 }
 
 export interface Gem {
+  // Composite "<email>/<geminiId>" identifier used in URLs and as a React key.
   id: string;
+  // The full GCS object name this gem was loaded from (e.g.
+  // "users/foo%40bar.com/gems/abc123.json"). Used to delete the object.
+  objectName: string;
   name: string;
   description: string | null;
   instructions: string;
-  icon: string | null;
   source: string;
-  status: string;
-  geminiId: string | null;
   knowledgeFiles: KnowledgeFile[];
   defaultTools: string[];
   owner: GemOwner;
-  importedAt: string;
   updatedAt: string;
   extractedAt: string | null;
-  duplicateCluster: { id: string; gemCount: number } | null;
 }

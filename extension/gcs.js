@@ -132,13 +132,45 @@
   }
 
   /**
-   * List the gem IDs already saved for `email` at users/<email>/gems/*.json.
-   * Used by the popup to mark locally-extracted gems that are already in the
-   * registry. Throws on network / auth errors; the caller swallows them.
+   * Download a single gem document and return the inner gem object.
+   * Each per-gem GCS document wraps exactly one gem inside a `gems` array
+   * (see saveGem above). Returns null for 404 or malformed payloads.
    */
-  async function listUserGemIds(bucket, email, token) {
+  async function downloadGemObject(bucket, objectName, token) {
+    var url = 'https://storage.googleapis.com/storage/v1/b/' +
+      encodeURIComponent(bucket) +
+      '/o/' + encodeURIComponent(objectName) + '?alt=media';
+    var res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      var body = await res.text();
+      var err = new Error('GCS download failed: ' + res.status + ' ' + body);
+      err.status = res.status;
+      throw err;
+    }
+    var doc = await res.json();
+    if (!doc || !Array.isArray(doc.gems) || doc.gems.length === 0) return null;
+    // Tag the gem with the source object so callers can correlate against
+    // local pending gems and optionally locate it for delete later.
+    var g = doc.gems[0];
+    g.objectName = objectName;
+    if (!g.extractedAt && doc.updatedAt) g.extractedAt = doc.updatedAt;
+    return g;
+  }
+
+  /**
+   * List + download every per-gem document for `email`. Returns the full
+   * gem payloads (id, name, description, instructions, knowledgeFiles,
+   * defaultTools, source, extractedAt) so the popup can render the bucket
+   * as the canonical list. Throws on network/auth errors; the caller is
+   * responsible for soft-failing as needed.
+   */
+  async function listUserGems(bucket, email, token) {
     var prefix = 'users/' + encodeURIComponent(String(email || '').toLowerCase()) + '/gems/';
-    var ids = [];
+    var objectNames = [];
     var pageToken = null;
     do {
       var url = 'https://storage.googleapis.com/storage/v1/b/' +
@@ -158,17 +190,19 @@
       var data = await res.json();
       var items = data.items || [];
       for (var i = 0; i < items.length; i++) {
-        var match = items[i].name.match(/^users\/[^/]+\/gems\/(.+)\.json$/);
-        if (!match) continue;
-        try {
-          ids.push(decodeURIComponent(match[1]));
-        } catch (e) {
-          ids.push(match[1]);
+        // Only accept the per-gem path; ignore anything else (including any
+        // legacy users/<email>/gems.json file still sitting in the bucket).
+        if (/^users\/[^/]+\/gems\/[^/]+\.json$/.test(items[i].name)) {
+          objectNames.push(items[i].name);
         }
       }
       pageToken = data.nextPageToken || null;
     } while (pageToken);
-    return ids;
+
+    var gems = await Promise.all(objectNames.map(function (name) {
+      return downloadGemObject(bucket, name, token).catch(function () { return null; });
+    }));
+    return gems.filter(function (g) { return g != null; });
   }
 
   // ---------- Export ----------
@@ -178,6 +212,6 @@
     removeCachedAuthToken: removeCachedAuthToken,
     getUserEmail: getUserEmail,
     saveGem: saveGem,
-    listUserGemIds: listUserGemIds,
+    listUserGems: listUserGems,
   };
 })(typeof self !== 'undefined' ? self : this);
