@@ -7,10 +7,13 @@
 (function () {
   'use strict';
 
-  // ---------- SVG Icons ----------
+  // ---------- Icons ----------
+
+  // Idle FAB renders the Schnucks logo PNG; other states use inline SVGs.
+  const LOGO_URL = chrome.runtime.getURL('icons/logo-icon.png');
 
   const ICONS = {
-    idle: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 2l-6 8 12 13L24 10 18 2H6zm1.5 1h9l4 6.5-8.5 9.5-8.5-9.5L7.5 3z" fill="currentColor"/><path d="M7.5 3l-4 6.5 8.5 9.5 8.5-9.5-4-6.5h-9z" fill="currentColor" opacity="0.3"/></svg>',
+    idle: '<img src="' + LOGO_URL + '" alt="Extract gem" />',
     loading: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8V2z" fill="currentColor"/></svg>',
     success: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>',
     error: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>',
@@ -889,10 +892,90 @@
     });
   }
 
+  // ---------- Public-Gemini Alert Banner ----------
+
+  // Renders a fixed-position banner at the very top of every gemini.google.com
+  // page (not just gem edit pages) to redirect corporate users to their
+  // private Gemini Enterprise instance. Configured via banner-config.js.
+
+  var BANNER_ID = 'gem-factory-public-banner';
+  var BANNER_HEIGHT_VAR = '--gem-factory-banner-height';
+  var bannerEl = null;
+  var bannerHeight = 0;
+
+  function getBannerConfig() {
+    var cfg = (typeof self !== 'undefined' && self.GEM_FACTORY_BANNER_CONFIG) || null;
+    if (!cfg || !cfg.enabled) return null;
+    return cfg;
+  }
+
+  function applyBodyOffset() {
+    // Reserve space at the top of the page so the banner never covers
+    // Gemini's own header. Using a CSS variable so the page can pick it up
+    // even when <body> is recreated by Angular during navigation.
+    document.documentElement.style.setProperty(BANNER_HEIGHT_VAR, bannerHeight + 'px');
+    if (document.body) {
+      document.body.style.paddingTop = 'var(' + BANNER_HEIGHT_VAR + ')';
+    }
+  }
+
+  function clearBodyOffset() {
+    document.documentElement.style.removeProperty(BANNER_HEIGHT_VAR);
+    if (document.body) document.body.style.paddingTop = '';
+  }
+
+  function createBanner() {
+    var cfg = getBannerConfig();
+    if (!cfg) return;
+
+    var el = document.createElement('div');
+    el.id = BANNER_ID;
+    el.setAttribute('role', 'alert');
+    el.style.backgroundColor = cfg.backgroundColor;
+    el.style.color = cfg.textColor;
+
+    var msg = document.createElement('span');
+    msg.className = 'gf-banner-message';
+    msg.textContent = cfg.message;
+    el.appendChild(msg);
+
+    if (cfg.enterpriseUrl) {
+      var link = document.createElement('a');
+      link.className = 'gf-banner-link';
+      link.href = cfg.enterpriseUrl;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.style.color = cfg.textColor;
+      link.textContent = cfg.linkLabel || cfg.enterpriseUrl;
+      el.appendChild(link);
+    }
+
+    // Insert into <html> rather than <body> so we survive Angular re-renders
+    // of the body subtree during SPA navigation.
+    document.documentElement.appendChild(el);
+    bannerEl = el;
+
+    // Measure after the browser has applied styles.
+    requestAnimationFrame(function () {
+      bannerHeight = bannerEl ? bannerEl.offsetHeight : 0;
+      applyBodyOffset();
+    });
+  }
+
+  function ensureBannerAttached() {
+    if (!getBannerConfig()) return;
+    if (!bannerEl || !document.documentElement.contains(bannerEl)) {
+      createBanner();
+    } else {
+      applyBodyOffset();
+    }
+  }
+
   // ---------- Init ----------
 
   fab = createFab();
   updateFabVisibility();
+  ensureBannerAttached();
 
   // Poll for SPA navigation
   var lastUrl = location.href;
@@ -902,6 +985,7 @@
       lastUrl = currentUrl;
       updateFabVisibility();
     }
+    ensureBannerAttached();
   }, 500);
 
 })();

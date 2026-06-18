@@ -1,3 +1,17 @@
+# Executed: 2026-06-09T08:33:55.783267
+
+You are a maintenance agent performing an **Update** action — regenerating a root project context file so it accurately reflects the current codebase.
+
+## Your task
+
+Rewrite the context file at `CLAUDE.md` so every fact matches the live code. This file is read by AI coding agents (Claude, Gemini) as their primary orientation to the project, so accuracy is critical.
+
+## Document to update
+
+- **Path:** `CLAUDE.md`
+- **Role:** Root project context file (read by AI agents via CLAUDE.md / GEMINI.md / AGENTS.md)
+
+<document>
 # Gem Factory — Claude Code Instructions
 
 > **Shared entry point is [AGENTS.md](./AGENTS.md).** The equivalent
@@ -22,9 +36,7 @@ rationale.
 
 ```
 gem-factory/
-  AGENTS.md                 ← shared entry point (routes to CLAUDE.md / GEMINI.md)
   CLAUDE.md                 ← you are here
-  GEMINI.md                 ← Gemini CLI instructions (equivalent of this file)
   Makefile                  ← project-level commands (help, spa-dev, spa-build, voicecode)
   docs/
     context/ARCH.md         ← architecture (extension + SPA + GCS bucket)
@@ -43,16 +55,17 @@ gem-factory/
       schnucks-logo.png     ← Schnucks Markets brand logo
     src/
       main.tsx              ← React DOM entry point
-      App.tsx               ← routes: Registry (/), GemDetail (/gems/:id), NotFound (*)
+      App.tsx               ← routes: Dashboard (/), Registry (/registry), GemDetail (/gems/:id)
       config.ts             ← env-derived bucketName + oauthClientId (single source of truth)
       index.css             ← Tailwind v4 import + Schnucks brand theme
       pages/
-        Registry.tsx        ← index route — full catalog with client-side search, owner filter, pagination
+        Dashboard.tsx       ← user's gems (filtered from the shared cache) + org stats
+        Registry.tsx        ← full catalog with client-side search, owner filter, pagination
         GemDetail.tsx       ← single gem view (lookup in the shared cache)
         NotFound.tsx        ← 404 page
       components/
-        Layout.tsx          ← header: Schnucks logo + Gem Registry label + user profile
-        GemTable.tsx        ← compact gem table used by Registry
+        Layout.tsx          ← header: Schnucks logo + nav + user profile
+        GemTable.tsx        ← compact gem table (shared by Dashboard and Registry)
         SearchBar.tsx       ← debounced search input (300ms)
         Pagination.tsx      ← page controls with record range display
         EmptyState.tsx      ← empty state message
@@ -63,25 +76,23 @@ gem-factory/
         GemsProvider.tsx    ← context that loads the catalog once and shares it
       auth/
         AuthProvider.tsx    ← Google Sign-In + GIS Token Client for GCS reads
-        useAuth.ts          ← auth hook (user, idToken, accessToken, isAuthenticated, signOut, signInAsDev)
+        useAuth.ts          ← auth hook (user, idToken, accessToken, isAuthenticated, signOut)
         GoogleSignIn.tsx    ← sign-in button component
         gis.d.ts            ← Google Identity Services type declarations
   extension/                ← Chrome extension (Manifest V3) — gem extractor + GCS writer
-    manifest.json           ← v0.12.0 — storage/identity/activeTab perms, oauth2 block, GCS host permission
+    manifest.json           ← v0.12.0 — identity permission, oauth2 block, GCS host permission
     config.js               ← single source of truth: bucketName + oauthClientId
     background.js           ← service worker: local gem storage (no external messaging)
     content-script.js       ← FAB + overlay on gem edit pages
     page-script.js          ← MAIN world script (reserved for future use)
-    gcs.js                  ← OAuth token + GCS REST (saveGem, create-only via ifGenerationMatch=0)
+    gcs.js                  ← OAuth token + GCS REST (loadUserGems, saveUserGems)
     popup.html              ← browser-action popup (extension toolbar icon)
     popup.js                ← gem list + Save to Registry → direct GCS upload
     styles.css              ← FAB, modal overlay, knowledge list styles
     icons/                  ← placeholder PNGs (blue diamond)
   media/                    ← media assets (source logo files, etc.)
   voicecode-bbs/            ← separate project — VoiceCode BBS (Python curses app)
-    AGENTS.md               ← its own shared entry point
     CLAUDE.md               ← its own Claude Code instructions
-    GEMINI.md               ← its own Gemini CLI instructions
   prompts/history/          ← prompt/response history from development sessions
 ```
 
@@ -133,12 +144,10 @@ catalog.
 
 | Path | Page | Description |
 |------|------|-------------|
-| `/` | Registry | Index route — all gems with client-side search, owner filter, pagination |
-| `/gems/:id` | GemDetail | Single gem detail (lookup in the shared cache) |
+| `/` | Dashboard | My gems (filtered from the shared cache) + org stats |
+| `/registry` | Registry | All gems with client-side search + owner filter |
+| `/gems/:id` | GemDetail | Single gem detail |
 | `*` | NotFound | 404 page |
-
-The `Registry` and `GemDetail` routes are nested under a `ProtectedRoutes`
-wrapper that redirects unauthenticated visitors to a sign-in page.
 
 **Auth flow:**
 
@@ -147,8 +156,7 @@ wrapper that redirects unauthenticated visitors to a sign-in page.
 - A separate GIS Token Client mints an OAuth access token with
   `devstorage.read_only` scope for GCS reads. Refreshes ~60 s before
   expiry; on 401 from GCS, AuthProvider re-requests silently.
-- Dev bypass: when `VITE_GOOGLE_CLIENT_ID` is empty, the sign-in page
-  exposes a **"Continue as dev user"** button that signs in as
+- Dev bypass: when `VITE_GOOGLE_CLIENT_ID` is empty, auto-authenticates as
   `dev@localhost`. The catalog will be empty unless you put a JSON file
   in the bucket manually (or use the extension to save one).
 
@@ -210,11 +218,7 @@ queries the extension.
 
 - **Test:** `gs://gcs-gem-registry` (the user's existing bucket).
 - **Production:** TBD — configure per `docs/deployment/gcs-bucket-setup.md`.
-- Object layout: `users/<email-lowercased>/gems/<gem-id>.json`, one
-  immutable file per gem (legacy files at `users/<email>/gems.json` are
-  still read by the SPA but no longer written). Writes use
-  `ifGenerationMatch=0` so the extension never overwrites or deletes —
-  re-saving an existing gem is reported as "already in registry".
+- Object layout: `users/<email-lowercased>/gems.json`, one file per user.
 - The bucket uses Uniform Bucket-Level Access + object versioning + CORS
   for browser origins.
 - See `docs/deployment/gcs-bucket-setup.md` for the full setup checklist
@@ -234,9 +238,8 @@ The Makefile uses `SHELL := /bin/bash`.
 ## voicecode-bbs/
 
 A separate Python curses application that lives in this repo. It has its
-own `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` — read those if working on
-VoiceCode. From the gem-factory root, the only touchpoint is `make
-voicecode`.
+own `CLAUDE.md` — read that file if working on VoiceCode. From the
+gem-factory root, the only touchpoint is `make voicecode`.
 
 ## Conventions
 
@@ -250,3 +253,38 @@ voicecode`.
 - Plans go in `docs/plans/`, specs in `docs/specs/`, architecture in
   `docs/context/`, decisions in `docs/decisions/`, runbooks in
   `docs/deployment/`.
+</document>
+
+## Instructions
+
+1. **Read the actual code.** Use your tools to explore files, grep for patterns, and read implementations. Do not rely solely on the embedded content — verify every claim against the live codebase.
+
+2. **Use git history for context.** Run `git log --oneline -30` and `git diff HEAD~10..HEAD --stat` to understand recent changes. This helps you identify what's new, what's been renamed, and what's been removed.
+
+3. **Preserve structure and voice.** Keep the same section headings, organizational hierarchy, and writing style. The document should feel like a natural update, not a rewrite from scratch.
+
+4. **Update all facts:**
+   - File paths and directory structure
+   - Module, class, and function names
+   - Architecture descriptions and data flows
+   - Configuration values and environment variables
+   - Dependencies and integration points
+   - UI descriptions and keyboard shortcuts
+
+5. **Add missing coverage.** If new modules, features, or subsystems have been added since the last update and they fall within this document's scope, add them in the appropriate section following the existing style.
+
+6. **Remove obsolete content.** If the document describes code or features that no longer exist, remove those references cleanly. Don't annotate removals — just take them out.
+
+7. **Cross-reference sibling context files.** If this is AGENTS.md, ensure references to CLAUDE.md and GEMINI.md are accurate. If this is CLAUDE.md or GEMINI.md, ensure it complements (not duplicates) AGENTS.md.
+
+## Output
+
+Overwrite the file at `CLAUDE.md` with the updated content. Do not create a new file — write directly to the existing path. Git provides rollback if needed.
+
+## Guidelines
+
+- **Accuracy over completeness.** It's better to omit something than to include a wrong claim. AI agents will trust this file.
+- **Be specific.** Reference actual file paths, class names, and module structure — vague descriptions are unhelpful for agents navigating the codebase.
+- **Keep it maintainable.** Write at the right level of abstraction. Don't list every function — describe the architecture and key entry points.
+- **Minimize churn.** Don't rewrite sections that are already accurate. Only change what needs changing so the git diff stays reviewable.
+

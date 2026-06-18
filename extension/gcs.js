@@ -84,76 +84,42 @@
 
   // ---------- Object path ----------
 
-  function objectPath(email) {
+  // Each gem becomes its own immutable object at users/<email>/gems/<id>.json.
+  // Writes never overwrite — see saveGem() below — so we don't need any
+  // storage.objects.delete permission. The SPA reader enumerates every
+  // .json object under users/<email>/gems/ and flattens them into the catalog.
+  function gemObjectPath(email, gemId) {
     var normalized = String(email || '').toLowerCase();
-    return 'users/' + encodeURIComponent(normalized) + '/gems.json';
+    return 'users/' + encodeURIComponent(normalized) +
+      '/gems/' + encodeURIComponent(String(gemId)) + '.json';
   }
 
   // ---------- GCS REST helpers ----------
 
-  function downloadUrl(bucket, name) {
-    return 'https://storage.googleapis.com/storage/v1/b/' +
+  /**
+   * Upload a single gem at users/<email>/gems/<id>.json with create-only
+   * semantics (ifGenerationMatch=0). If the object already exists, GCS
+   * returns 412 Precondition Failed without modifying anything — so we
+   * never need storage.objects.delete. The caller treats 412 as
+   * "already in registry".
+   */
+  async function saveGem(bucket, email, token, gem) {
+    var path = gemObjectPath(email, gem.id);
+    var url = 'https://storage.googleapis.com/upload/storage/v1/b/' +
       encodeURIComponent(bucket) +
-      '/o/' + encodeURIComponent(name) +
-      '?alt=media';
-  }
-
-  function uploadUrl(bucket, name) {
-    return 'https://storage.googleapis.com/upload/storage/v1/b/' +
-      encodeURIComponent(bucket) +
-      '/o?uploadType=media&name=' + encodeURIComponent(name);
-  }
-
-  function emptyDocument(email) {
-    return {
+      '/o?uploadType=media&ifGenerationMatch=0&name=' + encodeURIComponent(path);
+    var document = {
       schemaVersion: 1,
       owner: String(email || '').toLowerCase(),
-      updatedAt: null,
-      gems: [],
+      updatedAt: new Date().toISOString(),
+      gems: [gem],
     };
-  }
-
-  /**
-   * Fetch users/<email>/gems.json. Returns { document, etag } where etag may
-   * be null (e.g. on a fresh 404 — we synthesize an empty document).
-   */
-  async function loadUserGems(bucket, email, token) {
-    var url = downloadUrl(bucket, objectPath(email));
-    var res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Authorization': 'Bearer ' + token },
-    });
-    if (res.status === 404) {
-      return { document: emptyDocument(email), etag: null };
-    }
-    if (!res.ok) {
-      var body = await res.text();
-      throw new Error('GCS download failed: ' + res.status + ' ' + body);
-    }
-    var etag = res.headers.get('ETag');
-    var document = await res.json();
-    if (!document || typeof document !== 'object') {
-      document = emptyDocument(email);
-    }
-    return { document: document, etag: etag };
-  }
-
-  /**
-   * Upload users/<email>/gems.json. If `etag` is supplied, we send
-   * If-Match for optimistic concurrency; on 412 the caller can retry.
-   */
-  async function saveUserGems(bucket, email, token, document, etag) {
-    var url = uploadUrl(bucket, objectPath(email));
-    var headers = {
-      'Authorization': 'Bearer ' + token,
-      'Content-Type': 'application/json',
-    };
-    if (etag) {
-      headers['If-Match'] = etag;
-    }
     var res = await fetch(url, {
       method: 'POST',
-      headers: headers,
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(document),
     });
     if (!res.ok) {
@@ -165,14 +131,53 @@
     return await res.json();
   }
 
+  /**
+   * List the gem IDs already saved for `email` at users/<email>/gems/*.json.
+   * Used by the popup to mark locally-extracted gems that are already in the
+   * registry. Throws on network / auth errors; the caller swallows them.
+   */
+  async function listUserGemIds(bucket, email, token) {
+    var prefix = 'users/' + encodeURIComponent(String(email || '').toLowerCase()) + '/gems/';
+    var ids = [];
+    var pageToken = null;
+    do {
+      var url = 'https://storage.googleapis.com/storage/v1/b/' +
+        encodeURIComponent(bucket) +
+        '/o?prefix=' + encodeURIComponent(prefix) +
+        (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+      var res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + token },
+      });
+      if (!res.ok) {
+        var body = await res.text();
+        var err = new Error('GCS list failed: ' + res.status + ' ' + body);
+        err.status = res.status;
+        throw err;
+      }
+      var data = await res.json();
+      var items = data.items || [];
+      for (var i = 0; i < items.length; i++) {
+        var match = items[i].name.match(/^users\/[^/]+\/gems\/(.+)\.json$/);
+        if (!match) continue;
+        try {
+          ids.push(decodeURIComponent(match[1]));
+        } catch (e) {
+          ids.push(match[1]);
+        }
+      }
+      pageToken = data.nextPageToken || null;
+    } while (pageToken);
+    return ids;
+  }
+
   // ---------- Export ----------
 
   root.GemFactoryGCS = {
     getAccessToken: getAccessToken,
     removeCachedAuthToken: removeCachedAuthToken,
     getUserEmail: getUserEmail,
-    objectPath: objectPath,
-    loadUserGems: loadUserGems,
-    saveUserGems: saveUserGems,
+    saveGem: saveGem,
+    listUserGemIds: listUserGemIds,
   };
 })(typeof self !== 'undefined' ? self : this);

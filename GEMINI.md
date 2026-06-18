@@ -73,7 +73,7 @@ gem-factory/
     background.js           ← service worker: local gem storage (no external messaging)
     content-script.js       ← FAB + overlay on gem edit pages
     page-script.js          ← MAIN world script (reserved for future use)
-    gcs.js                  ← OAuth token + GCS REST (loadUserGems, saveUserGems)
+    gcs.js                  ← OAuth token + GCS REST (saveGem, create-only via ifGenerationMatch=0)
     popup.html              ← browser-action popup (extension toolbar icon)
     popup.js                ← gem list + Save to Registry → direct GCS upload
     styles.css              ← FAB, modal overlay, knowledge list styles
@@ -208,7 +208,11 @@ queries the extension.
 
 - **Test:** `gs://gcs-gem-registry` (the user's existing bucket).
 - **Production:** TBD — configure per `docs/deployment/gcs-bucket-setup.md`.
-- Object layout: `users/<email-lowercased>/gems.json`, one file per user.
+- Object layout: `users/<email-lowercased>/gems/<gem-id>.json`, one
+  immutable file per gem (legacy files at `users/<email>/gems.json` are
+  still read by the SPA but no longer written). Writes use
+  `ifGenerationMatch=0` so the extension never overwrites or deletes —
+  re-saving an existing gem is reported as "already in registry".
 - The bucket uses Uniform Bucket-Level Access + object versioning + CORS
   for browser origins.
 - See `docs/deployment/gcs-bucket-setup.md` for the full setup checklist

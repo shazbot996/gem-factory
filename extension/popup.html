@@ -68,6 +68,15 @@
       border-bottom: none;
     }
 
+    .gem-item.registered {
+      background: #f8fbff;
+    }
+
+    .gem-item.registered .gem-preview,
+    .gem-item.registered .gem-meta {
+      opacity: 0.75;
+    }
+
     .gem-info {
       flex: 1;
       min-width: 0;
@@ -80,6 +89,21 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .gem-badge-row {
+      margin-top: 3px;
+    }
+
+    .badge-registered {
+      display: inline-block;
+      padding: 1px 7px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      background: #e8f0fe;
+      color: #1967d2;
+      border-radius: 10px;
     }
 
     .gem-meta {
@@ -210,6 +234,11 @@
     .status-msg.success {
       background: #e6f4ea;
       color: #137333;
+    }
+
+    .status-msg.info {
+      background: #e8f0fe;
+      color: #1967d2;
     }
 
     .status-msg.error {

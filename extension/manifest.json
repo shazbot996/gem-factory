@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gem Factory Extractor",
-  "version": "0.12.0",
+  "version": "0.16.0",
   "description": "Extract Gemini gem configurations and save them directly to a Google Cloud Storage bucket",
   "permissions": [
     "storage",
@@ -33,7 +33,7 @@
   "content_scripts": [
     {
       "matches": ["https://gemini.google.com/*"],
-      "js": ["config.js", "content-script.js"],
+      "js": ["config.js", "banner-config.js", "content-script.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     },
@@ -42,6 +42,12 @@
       "js": ["page-script.js"],
       "run_at": "document_start",
       "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/logo-icon.png"],
+      "matches": ["https://gemini.google.com/*"]
     }
   ],
   "icons": {

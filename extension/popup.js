@@ -15,6 +15,11 @@ var bucketDisplayEl = document.getElementById('bucket-display');
 
 var currentEmail = null;
 var saveBtnRef = null;
+// Set of gem ids already saved to GCS for currentEmail. Populated by a
+// silent (non-interactive) listing on popup open, refreshed after save.
+// null means "not loaded yet"; an empty Set means "loaded, none saved".
+var registeredIds = null;
+var lastRenderedGems = [];
 
 // ---------- Bucket info ----------
 
@@ -53,10 +58,19 @@ function renderAuthStatus(email) {
 
 function updateSaveButtonState() {
   if (!saveBtnRef) return;
-  // Save is always allowed — first click triggers the interactive OAuth flow.
-  saveBtnRef.disabled = false;
-  saveBtnRef.title = 'Save these gems to ' +
-    ((window.GEM_FACTORY_CONFIG && window.GEM_FACTORY_CONFIG.bucketName) || 'the registry');
+  var bucket = (window.GEM_FACTORY_CONFIG && window.GEM_FACTORY_CONFIG.bucketName) || 'the registry';
+  // If we've loaded registry state and every local gem is already saved,
+  // disable Save and relabel — there's nothing new to push.
+  if (registeredIds && lastRenderedGems.length > 0 &&
+      lastRenderedGems.every(function (g) { return registeredIds.has(g.id); })) {
+    saveBtnRef.disabled = true;
+    saveBtnRef.textContent = 'All in registry';
+    saveBtnRef.title = 'Every gem in this list is already saved to ' + bucket;
+  } else {
+    saveBtnRef.disabled = false;
+    saveBtnRef.textContent = 'Save to Registry';
+    saveBtnRef.title = 'Save these gems to ' + bucket;
+  }
 }
 
 // ---------- Status messages ----------
@@ -78,6 +92,7 @@ function clearStatus() {
 
 function render(data) {
   var gems = (data && data.gems) || [];
+  lastRenderedGems = gems;
   countEl.textContent = gems.length + (gems.length === 1 ? ' gem' : ' gems');
 
   if (gems.length === 0) {
@@ -102,8 +117,10 @@ function render(data) {
   list.className = 'gem-list';
 
   sorted.forEach(function (gem) {
+    var isRegistered = registeredIds && registeredIds.has(gem.id);
+
     var li = document.createElement('li');
-    li.className = 'gem-item';
+    li.className = 'gem-item' + (isRegistered ? ' registered' : '');
 
     var info = document.createElement('div');
     info.className = 'gem-info';
@@ -112,6 +129,16 @@ function render(data) {
     name.className = 'gem-name';
     name.textContent = gem.name || '(unnamed)';
     info.appendChild(name);
+
+    if (isRegistered) {
+      var badgeRow = document.createElement('div');
+      badgeRow.className = 'gem-badge-row';
+      var badge = document.createElement('span');
+      badge.className = 'badge-registered';
+      badge.textContent = 'In registry';
+      badgeRow.appendChild(badge);
+      info.appendChild(badgeRow);
+    }
 
     if (gem.extractedAt) {
       var meta = document.createElement('div');
@@ -217,23 +244,6 @@ function render(data) {
 
 // ---------- Save to GCS ----------
 
-function mergeGems(existing, incoming) {
-  var byId = {};
-  for (var i = 0; i < existing.length; i++) {
-    var g = existing[i];
-    if (g && g.id) byId[g.id] = g;
-  }
-  for (var j = 0; j < incoming.length; j++) {
-    var n = incoming[j];
-    if (n && n.id) byId[n.id] = serializeGem(n);
-  }
-  var out = [];
-  for (var k in byId) {
-    if (Object.prototype.hasOwnProperty.call(byId, k)) out.push(byId[k]);
-  }
-  return out;
-}
-
 function serializeGem(g) {
   return {
     id: g.id,
@@ -254,6 +264,10 @@ function serializeGem(g) {
     source: g.source || 'edit_page',
     extractedAt: g.extractedAt || null,
   };
+}
+
+function pluralize(n, singular, plural) {
+  return n + ' ' + (n === 1 ? singular : plural);
 }
 
 async function saveToGCS(gems, btn) {
@@ -281,44 +295,77 @@ async function saveToGCS(gems, btn) {
         currentEmail = await window.GemFactoryGCS.getUserEmail(token);
         renderAuthStatus(currentEmail);
       } catch (e) {
-        // Fall through with no email — we have a token but couldn't discover
-        // the profile email. This is fatal — the object path requires email.
         throw new Error('Could not determine your Google account email. ' + e.message);
       }
     }
 
-    // Optimistic concurrency: read, merge, write with If-Match.
-    var loaded = await window.GemFactoryGCS.loadUserGems(bucket, currentEmail, token);
-    var nextDocument = {
-      schemaVersion: 1,
-      owner: currentEmail,
-      updatedAt: new Date().toISOString(),
-      gems: mergeGems(loaded.document.gems || [], gems),
-    };
+    // Each gem is its own immutable object. Upload uses ifGenerationMatch=0
+    // (create-only), so re-saving a previously-saved gem returns 412 — we
+    // count it as "already in registry" rather than failing.
+    if (!registeredIds) registeredIds = new Set();
+    var savedCount = 0;
+    var duplicateCount = 0;
+    var firstDuplicateName = null;
+    var firstSavedName = null;
+    var failures = [];
 
-    try {
-      await window.GemFactoryGCS.saveUserGems(bucket, currentEmail, token, nextDocument, loaded.etag);
-    } catch (err) {
-      // 412 = etag mismatch (someone else wrote in the gap). Refetch, remerge, retry once.
-      if (err && err.status === 412) {
-        var second = await window.GemFactoryGCS.loadUserGems(bucket, currentEmail, token);
-        var retryDocument = {
-          schemaVersion: 1,
-          owner: currentEmail,
-          updatedAt: new Date().toISOString(),
-          gems: mergeGems(second.document.gems || [], gems),
-        };
-        await window.GemFactoryGCS.saveUserGems(bucket, currentEmail, token, retryDocument, second.etag);
-      } else if (err && err.status === 401) {
-        // Token rejected — drop the cached token so the next attempt re-prompts.
-        await window.GemFactoryGCS.removeCachedAuthToken(token);
-        throw new Error('Authorization expired. Click Save again to re-authorize.');
-      } else {
-        throw err;
+    for (var i = 0; i < gems.length; i++) {
+      var gem = serializeGem(gems[i]);
+      try {
+        await window.GemFactoryGCS.saveGem(bucket, currentEmail, token, gem);
+        savedCount++;
+        if (!firstSavedName) firstSavedName = gem.name || gem.id;
+        registeredIds.add(gem.id);
+      } catch (err) {
+        if (err && err.status === 412) {
+          duplicateCount++;
+          if (!firstDuplicateName) firstDuplicateName = gem.name || gem.id;
+          registeredIds.add(gem.id);
+        } else if (err && err.status === 401) {
+          // Token rejected — drop cached token and ask the user to retry.
+          await window.GemFactoryGCS.removeCachedAuthToken(token);
+          throw new Error('Authorization expired. Click Save again to re-authorize.');
+        } else {
+          failures.push({ name: gem.name || gem.id, message: (err && err.message) || String(err) });
+        }
       }
     }
 
-    showStatus('Saved ' + gems.length + (gems.length === 1 ? ' gem to ' : ' gems to ') + bucket, 'success');
+    // Compose a status message that distinguishes "saved", "already in
+    // registry", and "failed". The all-duplicates case uses the `info`
+    // style so it looks distinct from a successful save.
+    var msgType;
+    var summary;
+
+    if (failures.length > 0) {
+      msgType = 'error';
+      var parts = [];
+      if (savedCount > 0) parts.push(pluralize(savedCount, 'gem saved', 'gems saved'));
+      if (duplicateCount > 0) parts.push(pluralize(duplicateCount, 'already in registry', 'already in registry'));
+      parts.push(pluralize(failures.length, 'failed', 'failed'));
+      summary = parts.join(' • ') + ': ' + failures[0].message;
+    } else if (savedCount === 0 && duplicateCount > 0) {
+      msgType = 'info';
+      summary = (duplicateCount === 1 && firstDuplicateName)
+        ? '"' + firstDuplicateName + '" is already in the registry — nothing to save.'
+        : 'All ' + duplicateCount + ' gems are already in the registry — nothing to save.';
+    } else if (savedCount > 0 && duplicateCount === 0) {
+      msgType = 'success';
+      summary = (savedCount === 1 && firstSavedName)
+        ? 'Saved "' + firstSavedName + '" to ' + bucket
+        : 'Saved ' + pluralize(savedCount, 'gem', 'gems') + ' to ' + bucket;
+    } else if (savedCount > 0 && duplicateCount > 0) {
+      msgType = 'success';
+      summary = pluralize(savedCount, 'new gem saved', 'new gems saved') +
+        ' • ' + pluralize(duplicateCount, 'already in registry', 'already in registry');
+    } else {
+      msgType = 'info';
+      summary = 'Nothing to save.';
+    }
+
+    showStatus(summary, msgType);
+    // Re-render so badges + button state reflect the post-save registry.
+    loadGems();
   } catch (err) {
     showStatus('Error: ' + (err.message || String(err)), 'error');
   } finally {
@@ -346,6 +393,47 @@ function loadGems() {
   });
 }
 
+/**
+ * Try to populate `registeredIds` by querying GCS for the current user's
+ * gem objects. Uses a non-interactive OAuth flow so opening the popup
+ * never surprises the user with a consent dialog — if no token is cached
+ * we simply skip and the popup falls back to showing local-only state.
+ */
+async function refreshRegistry(opts) {
+  opts = opts || {};
+  var bucket = window.GEM_FACTORY_CONFIG && window.GEM_FACTORY_CONFIG.bucketName;
+  if (!bucket) return;
+
+  var token;
+  try {
+    token = await window.GemFactoryGCS.getAccessToken(opts.interactive === true);
+  } catch (e) {
+    // No cached consent yet (or user dismissed it). Stay silent — Save
+    // will trigger the interactive prompt later.
+    return;
+  }
+  if (!currentEmail) {
+    try {
+      currentEmail = await window.GemFactoryGCS.getUserEmail(token);
+      renderAuthStatus(currentEmail);
+    } catch (e) {
+      return;
+    }
+  }
+  try {
+    var ids = await window.GemFactoryGCS.listUserGemIds(bucket, currentEmail, token);
+    registeredIds = new Set(ids);
+    // Re-render so each gem reflects its registry state.
+    loadGems();
+  } catch (err) {
+    if (err && err.status === 401) {
+      // Cached token is no longer valid — drop it; next Save will reprompt.
+      await window.GemFactoryGCS.removeCachedAuthToken(token);
+    }
+    // Soft-fail: keep showing local-only state.
+  }
+}
+
 // ---------- Init ----------
 
 renderBucketInfo();
@@ -364,3 +452,7 @@ if (window.GemFactoryGCS && window.GemFactoryGCS.getUserEmail) {
 }
 
 loadGems();
+// Silently query GCS so each gem can be tagged "In registry" as soon as the
+// popup paints. No-op if the user hasn't granted OAuth consent yet — the
+// first Save click will still trigger the interactive prompt.
+refreshRegistry();

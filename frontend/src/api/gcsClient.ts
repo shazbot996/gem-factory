@@ -1,6 +1,7 @@
 // Read-only Google Cloud Storage client for the SPA. The SPA loads every
-// users/<email>/gems.json under the configured bucket and aggregates them
-// for the dashboard/registry views.
+// per-gem object at users/<email>/gems/<id>.json (plus any legacy
+// users/<email>/gems.json files from before the per-gem rewrite) and
+// aggregates them for the registry view.
 //
 // Auth: an OAuth access token (devstorage.read_only scope) is set by
 // AuthProvider after the GIS Token Client returns. The SPA NEVER writes —
@@ -75,6 +76,11 @@ async function gcsFetch(url: string): Promise<Response> {
   return res;
 }
 
+// Matches either the legacy users/<email>/gems.json file or the new
+// per-gem users/<email>/gems/<id>.json objects.
+const LEGACY_DOC = /^users\/[^/]+\/gems\.json$/;
+const PER_GEM_DOC = /^users\/[^/]+\/gems\/[^/]+\.json$/;
+
 export async function listUserObjects(bucket: string): Promise<string[]> {
   const names: string[] = [];
   let pageToken: string | undefined;
@@ -91,7 +97,9 @@ export async function listUserObjects(bucket: string): Promise<string[]> {
     const data = (await res.json()) as GcsObjectListResponse;
     if (data.items) {
       for (const item of data.items) {
-        if (item.name.endsWith('/gems.json')) names.push(item.name);
+        if (LEGACY_DOC.test(item.name) || PER_GEM_DOC.test(item.name)) {
+          names.push(item.name);
+        }
       }
     }
     pageToken = data.nextPageToken;
@@ -112,8 +120,9 @@ export async function downloadObject(bucket: string, name: string): Promise<User
 }
 
 function ownerEmailFromPath(name: string): string {
-  // name = "users/<encoded-email>/gems.json"
-  const match = name.match(/^users\/([^/]+)\/gems\.json$/);
+  // Matches both "users/<encoded-email>/gems.json" (legacy) and
+  // "users/<encoded-email>/gems/<id>.json" (per-gem).
+  const match = name.match(/^users\/([^/]+)\//);
   if (!match) return '';
   try {
     return decodeURIComponent(match[1]);

@@ -2,6 +2,43 @@
    Gem Factory Extractor — Content Script Styles
    ========================================================================== */
 
+/* ---------- Public-Gemini Alert Banner ---------- */
+
+#gem-factory-public-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647; /* sit above Gemini's own header */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 20px;
+  font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+#gem-factory-public-banner .gf-banner-message {
+  max-width: 900px;
+}
+
+#gem-factory-public-banner .gf-banner-link {
+  font-weight: 600;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+#gem-factory-public-banner .gf-banner-link:hover {
+  text-decoration: none;
+  opacity: 0.85;
+}
+
 /* ---------- Floating Action Button (FAB) ---------- */
 
 #gem-factory-fab {
@@ -13,12 +50,13 @@
   height: 56px;
   border-radius: 50%;
   border: none;
-  background: #4285F4;
+  background: white;
   color: white;
   cursor: pointer;
   display: none; /* Shown by JS when on a gems page */
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   padding: 0;
@@ -50,7 +88,19 @@
   fill: currentColor;
 }
 
+#gem-factory-fab img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
 /* FAB states */
+#gem-factory-fab.loading {
+  background: #4285F4;
+}
+
 #gem-factory-fab.success {
   background: #0f9d58;
 }
