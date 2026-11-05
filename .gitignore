@@ -11,3 +11,11 @@ frontend/.env.production.local
 frontend/dist/
 frontend/tsconfig.app.tsbuildinfo
 frontend/tsconfig.node.tsbuildinfo
+
+# cr2: local state, never shared
+.cr2/transcript.json
+.cr2/session.json
+.cr2/local.json
+.cr2/runs.jsonl*
+.cr2/attachments/
+prompts/*/DRAFT.prompt.md

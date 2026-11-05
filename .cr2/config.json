@@ -1,0 +1,578 @@
+{
+  "schemaVersion": 3,
+  "panels": [
+    {
+      "id": "root",
+      "title": "Root",
+      "kind": "fixed",
+      "slots": [
+        {
+          "id": "readme",
+          "path": "README.md",
+          "type": "readme"
+        },
+        {
+          "id": "changelog",
+          "path": "CHANGELOG.md",
+          "type": "changelog"
+        },
+        {
+          "id": "agents",
+          "path": "AGENTS.md",
+          "type": "agents"
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "title": "Core",
+      "kind": "fixed",
+      "slots": [
+        {
+          "id": "brief",
+          "path": "docs/context/BRIEF.md",
+          "type": "brief"
+        },
+        {
+          "id": "glossary",
+          "path": "docs/context/GLOSSARY.md",
+          "type": "glossary"
+        },
+        {
+          "id": "conventions",
+          "path": "docs/context/CONVENTIONS.md",
+          "type": "conventions"
+        },
+        {
+          "id": "constraints",
+          "path": "docs/context/CONSTRAINTS.md",
+          "type": "constraints"
+        },
+        {
+          "id": "schema",
+          "path": "docs/context/SCHEMA.md",
+          "type": "schema"
+        },
+        {
+          "id": "arch",
+          "path": "docs/context/ARCH.md",
+          "type": "arch"
+        },
+        {
+          "id": "infrastructure",
+          "path": "docs/context/INFRASTRUCTURE.md",
+          "type": "infrastructure",
+          "optional": true
+        }
+      ],
+      "dir": "docs/context"
+    },
+    {
+      "id": "decisions",
+      "title": "Decisions",
+      "kind": "collection",
+      "dir": "docs/decisions",
+      "label": "ADR",
+      "type": "decision",
+      "numbered": true
+    },
+    {
+      "id": "specs",
+      "title": "Specs",
+      "kind": "collection",
+      "dir": "docs/specs",
+      "type": "spec",
+      "suffix": "SPEC",
+      "lifecycle": true,
+      "numbered": false
+    },
+    {
+      "id": "plans",
+      "title": "Plans",
+      "kind": "collection",
+      "dir": "docs/plans",
+      "type": "plan",
+      "suffix": "PLAN",
+      "lifecycle": true,
+      "numbered": false
+    }
+  ],
+  "providers": {
+    "agy": {
+      "module": "agy",
+      "label": "Antigravity CLI (agy)",
+      "enabled": true,
+      "billing": "enterprise",
+      "project": "cbs-altostrat-dev",
+      "location": "us-central1",
+      "maxTurns": 40,
+      "models": [
+        {
+          "id": "gemini-4-argon",
+          "label": "Gemini 4 Argon (agy)",
+          "input": 0,
+          "output": 0,
+          "context": 2000000,
+          "maxOutput": 8192,
+          "reasoning": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "effort": true,
+          "tools": true
+        },
+        {
+          "id": "gemini-3.8-flash",
+          "label": "Gemini 3.8 Flash (agy)",
+          "input": 0,
+          "output": 0,
+          "context": 1000000,
+          "maxOutput": 8192,
+          "reasoning": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "effort": true,
+          "tools": true
+        },
+        {
+          "id": "gemini-3.7-flash",
+          "label": "Gemini 3.7 Flash (agy)",
+          "input": 0,
+          "output": 0,
+          "context": 1000000,
+          "maxOutput": 8192,
+          "reasoning": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "effort": true,
+          "tools": true
+        },
+        {
+          "id": "gemini-3.6-flash",
+          "label": "Gemini 3.6 Flash (agy)",
+          "input": 0,
+          "output": 0,
+          "context": 1000000,
+          "maxOutput": 8192,
+          "reasoning": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "effort": true,
+          "tools": true
+        },
+        {
+          "id": "gemini-3.1-pro",
+          "label": "Gemini 3.1 Pro (agy)",
+          "input": 0,
+          "output": 0,
+          "context": 2000000,
+          "maxOutput": 8192,
+          "reasoning": [
+            "low",
+            "high"
+          ],
+          "effort": true,
+          "tools": true
+        }
+      ]
+    },
+    "echo": {
+      "enabled": false,
+      "models": [
+        {
+          "id": "echo",
+          "label": "Echo",
+          "input": 0,
+          "output": 0,
+          "effort": false
+        }
+      ]
+    },
+    "claude": {
+      "module": "claude",
+      "label": "Claude CLI",
+      "enabled": false,
+      "maxCostUsd": 25,
+      "maxTurns": 40,
+      "models": [
+        {
+          "id": "claude-opus-5-5",
+          "label": "Opus 5.5",
+          "input": 0,
+          "output": 0,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "effort": true,
+          "images": true,
+          "tools": true
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "label": "Sonnet 5.5",
+          "input": 0,
+          "output": 0,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "effort": true,
+          "images": true,
+          "tools": true
+        },
+        {
+          "id": "claude-haiku-5-5",
+          "label": "Haiku 5.5",
+          "input": 0,
+          "output": 0,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "effort": true,
+          "images": true,
+          "tools": true
+        },
+        {
+          "id": "claude-fable-5-1",
+          "label": "Fable 5.1",
+          "input": 0,
+          "output": 0,
+          "reasoning": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "effort": true,
+          "images": true,
+          "tools": true
+        }
+      ],
+      "refineModel": "claude-opus-5-5"
+    }
+  },
+  "agents": {
+    "direct": {
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "build"
+    },
+    "refine": {
+      "prompt": "refine",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "low",
+      "max_tokens": 16000,
+      "workspace": "self",
+      "mode": "read"
+    },
+    "compact": {
+      "prompt": "compact",
+      "model": "agy:gemini-3.8-flash",
+      "max_tokens": 4000,
+      "workspace": "self",
+      "mode": "read"
+    },
+    "create": {
+      "prompt": "create",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 64000
+    },
+    "revise": {
+      "prompt": "revise",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 64000
+    },
+    "drift": {
+      "prompt": "drift",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 32000
+    },
+    "derive": {
+      "prompt": "create",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 64000
+    },
+    "answer": {
+      "prompt": "answer",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 64000
+    },
+    "plan": {
+      "prompt": "plan",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "medium",
+      "max_tokens": 64000,
+      "maxTurns": 100,
+      "maxCostUsd": 20,
+      "timeoutMs": 1800000
+    },
+    "apply": {
+      "prompt": "apply",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "high",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "build",
+      "maxTurns": 200,
+      "maxCostUsd": 100,
+      "timeoutMs": 3600000
+    },
+    "archive": {
+      "prompt": "archive",
+      "model": "agy:gemini-3.8-flash",
+      "effort": "high",
+      "max_tokens": 16000
+    },
+    "direct:general": {
+      "prompt": "direct/general",
+      "effort": "medium",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "build",
+      "model": "agy:gemini-3.8-flash"
+    },
+    "direct:ask": {
+      "prompt": "direct/ask",
+      "effort": "medium",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "read",
+      "model": "agy:gemini-3.8-flash"
+    },
+    "direct:fix": {
+      "prompt": "direct/fix",
+      "effort": "high",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "build",
+      "model": "agy:gemini-4-argon"
+    },
+    "direct:context": {
+      "prompt": "direct/context",
+      "effort": "medium",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "build",
+      "model": "agy:gemini-4-argon"
+    },
+    "direct:reverse": {
+      "prompt": "direct/reverse",
+      "effort": "high",
+      "max_tokens": 64000,
+      "workspace": "self",
+      "mode": "build",
+      "maxTurns": 250,
+      "model": "agy:gemini-4-argon"
+    }
+  },
+  "types": {
+    "readme": {
+      "authority": "descriptive",
+      "sections": [
+        "What it is, in a paragraph a stranger can follow",
+        "Running it",
+        "Where things are",
+        "Open Questions"
+      ]
+    },
+    "agents": {
+      "authority": "prescriptive",
+      "sections": [
+        "What to run before reporting",
+        "What not to touch",
+        "Open Questions"
+      ]
+    },
+    "glossary": {
+      "authority": "prescriptive",
+      "sections": [
+        "One entry per term: what it means here, and what it does not",
+        "Open Questions"
+      ]
+    },
+    "conventions": {
+      "authority": "prescriptive",
+      "sections": [
+        "One section per area, each convention with its reason",
+        "Open Questions"
+      ]
+    },
+    "constraints": {
+      "authority": "prescriptive",
+      "sections": [
+        "One section per constraint: the rule, why it holds, and how a violation would be noticed",
+        "Open Questions"
+      ]
+    },
+    "schema": {
+      "authority": "descriptive",
+      "sections": [
+        "One section per shape: where it is defined, and its fields as a table",
+        "Open Questions"
+      ]
+    },
+    "arch": {
+      "authority": "descriptive",
+      "sections": [
+        "What the parts are",
+        "How they fit",
+        "The seams",
+        "Open Questions"
+      ]
+    },
+    "spec": {
+      "authority": "prescriptive",
+      "sections": [
+        "A one-paragraph summary under the title",
+        "Numbered rules, each with its reason",
+        "Open Questions"
+      ]
+    },
+    "plan": {
+      "authority": "prescriptive",
+      "sections": [
+        "The delta",
+        "Numbered steps, each with its files and a Done when",
+        "Choices the spec leaves open",
+        "Out of scope",
+        "Open Questions"
+      ]
+    },
+    "decision": {
+      "authority": "historical",
+      "sections": [
+        "Context",
+        "Decision",
+        "Alternatives",
+        "Consequences",
+        "Open Questions"
+      ]
+    },
+    "context": {
+      "authority": "prescriptive",
+      "sections": [
+        "One subject, treated completely",
+        "Open Questions"
+      ]
+    },
+    "changelog": {
+      "authority": "historical",
+      "sections": [
+        "Unreleased",
+        "One section per released version, newest first, grouped as Added, Changed, Deprecated, Removed, Fixed and Security"
+      ]
+    },
+    "brief": {
+      "authority": "prescriptive",
+      "sections": [
+        "What it is",
+        "Who it is for",
+        "What it is not",
+        "Open Questions"
+      ]
+    },
+    "infrastructure": {
+      "authority": "descriptive",
+      "sections": [
+        "One section per environment or account: what exists there, with its identifiers",
+        "What defines it",
+        "Open Questions"
+      ]
+    }
+  },
+  "activeProvider": "agy",
+  "presets": {
+    "agy": {
+      "direct": "gemini-3.8-flash",
+      "refine": "gemini-3.8-flash",
+      "compact": "gemini-3.8-flash",
+      "create": "gemini-4-argon",
+      "revise": "gemini-3.8-flash",
+      "drift": "gemini-3.8-flash",
+      "derive": "gemini-3.8-flash",
+      "answer": "gemini-3.8-flash",
+      "plan": "gemini-4-argon",
+      "apply": "gemini-4-argon",
+      "archive": "gemini-4-argon",
+      "direct:general": "gemini-3.8-flash",
+      "direct:ask": "gemini-3.8-flash",
+      "direct:fix": "gemini-4-argon",
+      "direct:context": "gemini-4-argon",
+      "direct:reverse": "gemini-4-argon"
+    },
+    "claude": {
+      "direct": "claude-sonnet-5-5",
+      "refine": "claude-haiku-5-5",
+      "compact": "claude-haiku-5-5",
+      "create": "claude-sonnet-5-5",
+      "revise": "claude-sonnet-5-5",
+      "drift": "claude-sonnet-5-5",
+      "derive": "claude-sonnet-5-5",
+      "answer": "claude-sonnet-5-5",
+      "plan": "claude-opus-5-5",
+      "apply": "claude-opus-5-5",
+      "archive": "claude-opus-5-5",
+      "direct:general": "claude-sonnet-5-5",
+      "direct:ask": "claude-sonnet-5-5",
+      "direct:fix": "claude-opus-5-5",
+      "direct:context": "claude-opus-5-5",
+      "direct:reverse": "claude-opus-5-5"
+    }
+  },
+  "imported": {
+    "AGENTS.md": {
+      "as": "root.agents",
+      "why": "named AGENTS.md at the root"
+    },
+    "docs/specs": {
+      "as": "specs",
+      "why": "in a folder named specs, with 6 documents"
+    },
+    "CLAUDE.md": {
+      "as": null,
+      "why": "markdown at the root that no rule placed"
+    },
+    "docs/001_design_an_architecture_for_a_prompt.md": {
+      "as": null,
+      "why": "markdown under docs/ that no rule placed"
+    },
+    "docs/deployment/gcs-bucket-setup.md": {
+      "as": null,
+      "why": "markdown under docs/deployment/ that no rule placed"
+    },
+    "docs/gem-factory-workflow-diagram-PROMPT.md": {
+      "as": null,
+      "why": "markdown under docs/ that no rule placed"
+    },
+    "GEMINI.md": {
+      "as": null,
+      "why": "markdown at the root that no rule placed"
+    }
+  }
+}
