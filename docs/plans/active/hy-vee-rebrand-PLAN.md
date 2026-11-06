@@ -18,6 +18,9 @@ provenance:
   - run: schiele/0008
     at: 2026-11-06T12:07:19.987Z
     mode: create
+  - run: schiele/0013
+    at: 2026-11-06T15:29:10.017Z
+    mode: revise
 ---
 
 # Hy-Vee Rebrand — Implementation Plan
@@ -80,6 +83,8 @@ Implements the Schnucks Gem Registry SPA — Frontend Client Application spec (`
 1. **Hy-Vee color palette values.** The spec defines Schnucks red (`#E31837`), but does not specify Hy-Vee tokens. Standard Hy-Vee corporate red (`#EE2724` with hover `#D71920`) is used as the default.
 2. **Logo asset naming.** The existing asset was `schnucks-logo.png`. Adopting `hy-vee-logo.png` keeps naming clear and avoids browser asset cache collisions.
 3. **Single-tenant deployment model.** The rebrand replaces Schnucks branding directly in place rather than introducing dynamic multi-tenant white-labeling, preserving the client-only architecture.
+4. **Google Sign-In account domain restriction.** The spec does not dictate restricting authentication strictly to corporate domains. Personal Gmail accounts remain permitted alongside `@hy-vee.com` accounts, so no `hd` domain restriction is enforced in Google Sign-In.
+5. **Enterprise destination URL.** The spec leaves tenant-specific portal URLs open. The extension banner continues linking to `https://geminienterprise.google.com/` because Google automatically resolves the tenant based on the active authenticated enterprise session and a dedicated corporate URL is not yet available.
 
 ## 6. Out of scope
 
@@ -107,5 +112,4 @@ Implements the Schnucks Gem Registry SPA — Frontend Client Application spec (`
 
 ## Open Questions
 
-- **Domain restriction.** Should Google Sign-In be strictly restricted to `@hy-vee.com` Google Workspace accounts via the `hd` claim, or should personal Gmail accounts remain permitted during testing? Recommended: Allow personal Gmail accounts during initial dev testing, but enforce `@hy-vee.com` before production rollout, because internal corporate gem configurations should be secured against non-employee access.
-- **Enterprise destination URL.** Does Hy-Vee have a dedicated corporate URL or SSO entry point for its Gemini Enterprise instance, or should the extension banner continue linking to `https://geminienterprise.google.com/`? Recommended: Link to `https://geminienterprise.google.com/` initially, because Google automatically resolves the tenant based on the active authenticated enterprise session.
+(None.)
