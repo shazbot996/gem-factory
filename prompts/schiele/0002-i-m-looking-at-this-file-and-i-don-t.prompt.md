@@ -1,0 +1,41 @@
+---
+run: schiele/0002
+at: 2026-11-05T14:52:25.577Z
+mode: direct
+agent: direct:ask
+model: agy:gemini-3.8-flash
+target: null
+template: direct/ask
+prompt-sha: 49b765c03f53
+template-sha: 44af0dfef32e
+commit: 3212a77+
+attachments: []
+read:
+  - AGENTS.md
+outcome: failed
+usage:
+  input: 0
+  output: 0
+cost: 0
+error: |
+  Tier 2 worker dispatch failed with HTTP 404: 
+  <html><head>
+  <meta http-equiv="content-type" content="text/html;charset=utf-8">
+  <title>404 Page not found</title>
+  </head>
+  <body text=#000000 bgcolor=#ffffff>
+  <h1>Error: Page not found</h1>
+  <h2>The requested URL was not found on this server.</h2>
+  <h2></h2>
+  </body></html>
+harness:
+  provider: agy
+  kind: sdk
+  workspace: self
+  access: read
+  turns: 0
+  sandbox: false
+  conversation: b5c94a3c-fbf0-4a07-840a-e97046f80495
+---
+
+I'm looking at this file and I don't believe it fully conforms to the CR2 spec this was written a long time ago and I don't think I ever imported it so just review this current plan and just a test to see if the agent works and don't change it just give me a review of this plan and how well it fits the CR2 standard in terms of front matter and formatting.  review this plan: docs/plans/spa-frontend-PLAN.md

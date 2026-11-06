@@ -1,3 +1,10 @@
+---
+type: context
+title: Gem Factory — AI Coding Assistant Entry Point
+authority: prescriptive
+status: active
+---
+
 # Gem Factory — AI Coding Assistant Entry Point
 
 This file is the canonical entry point for AI coding assistants working in
