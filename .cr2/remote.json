@@ -1,0 +1,7 @@
+{
+  "remote": true,
+  "repoUrl": "https://github.com/shazbot996/gem-factory.git",
+  "repoSlug": "shazbot996/gem-factory",
+  "workingBranch": "cr2/schiele/gem-factory",
+  "baseBranch": "main"
+}
